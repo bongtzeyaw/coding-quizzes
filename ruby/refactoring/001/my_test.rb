@@ -27,62 +27,62 @@ class TestReservationSystem < Minitest::Test
   end
 
   def test_single_room_regular_user
-    expected = 'Single room reserved for 2024-01-01. Price: 8000'
+    expected = 'Single room reserved for 2024-01-01. Price: 8000.00'
     assert_equal expected, @system.check_reservation('A123', 1, '2024-01-01')
   end
 
   def test_single_room_regular_user_august_surcharge
-    expected = 'Single room reserved for 2024-08-01. Price: 12000.0'
+    expected = 'Single room reserved for 2024-08-01. Price: 12000.00'
     assert_equal expected, @system.check_reservation('A123', 1, '2024-08-01')
   end
 
   def test_single_room_guest_user
-    expected = 'Single room reserved for 2024-01-01. Price: 7200.0'
+    expected = 'Single room reserved for 2024-01-01. Price: 7200.00'
     assert_equal expected, @system.check_reservation('G123', 1, '2024-01-01')
   end
 
   def test_single_room_guest_user_august_surcharge
-    expected = 'Single room reserved for 2024-08-01. Price: 10800.0'
+    expected = 'Single room reserved for 2024-08-01. Price: 10800.00'
     assert_equal expected, @system.check_reservation('G123', 1, '2024-08-01')
   end
 
   def test_double_room_regular_user
-    expected = 'Double room reserved for 2024-01-01. Price: 12000'
+    expected = 'Double room reserved for 2024-01-01. Price: 12000.00'
     assert_equal expected, @system.check_reservation('A123', 2, '2024-01-01')
   end
 
   def test_double_room_regular_user_august_surcharge
-    expected = 'Double room reserved for 2024-08-01. Price: 18000.0'
+    expected = 'Double room reserved for 2024-08-01. Price: 18000.00'
     assert_equal expected, @system.check_reservation('A123', 2, '2024-08-01')
   end
 
   def test_double_room_guest_user
-    expected = 'Double room reserved for 2024-01-01. Price: 10800.0'
+    expected = 'Double room reserved for 2024-01-01. Price: 10800.00'
     assert_equal expected, @system.check_reservation('G123', 2, '2024-01-01')
   end
 
   def test_double_room_guest_user_august_surcharge
-    expected = 'Double room reserved for 2024-08-01. Price: 16200.0'
+    expected = 'Double room reserved for 2024-08-01. Price: 16200.00'
     assert_equal expected, @system.check_reservation('G123', 2, '2024-08-01')
   end
 
   def test_suite_regular_user
-    expected = 'Suite reserved for 2024-01-01. Price: 20000'
+    expected = 'Suite reserved for 2024-01-01. Price: 20000.00'
     assert_equal expected, @system.check_reservation('A123', 3, '2024-01-01')
   end
 
   def test_suite_regular_user_august_surcharge
-    expected = 'Suite reserved for 2024-08-01. Price: 30000.0'
+    expected = 'Suite reserved for 2024-08-01. Price: 30000.00'
     assert_equal expected, @system.check_reservation('A123', 3, '2024-08-01')
   end
 
   def test_suite_guest_user
-    expected = 'Suite reserved for 2024-01-01. Price: 18000.0'
+    expected = 'Suite reserved for 2024-01-01. Price: 18000.00'
     assert_equal expected, @system.check_reservation('G123', 3, '2024-01-01')
   end
 
   def test_suite_guest_user_august_surcharge
-    expected = 'Suite reserved for 2024-08-01. Price: 27000.0'
+    expected = 'Suite reserved for 2024-08-01. Price: 27000.00'
     assert_equal expected, @system.check_reservation('G123', 3, '2024-08-01')
   end
 end
