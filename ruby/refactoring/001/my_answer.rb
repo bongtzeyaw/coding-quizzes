@@ -1,7 +1,7 @@
 require 'date'
 
 class ReservationSystem
-  ROOM_TYPE_NAME_BASE_PRICE = {
+  ROOM_TYPE_DETAILS = {
     1 => {room_name: "Single room", base_price: 8_000.00},
     2 => {room_name: "Double room", base_price: 12_000.00},
     3 => {room_name: "Suite", base_price: 20_000.00}
@@ -9,15 +9,14 @@ class ReservationSystem
 
   def check_reservation(user, room_type, date)
     return 'error' if user.nil?
-    return 'error' unless ROOM_TYPE_NAME_BASE_PRICE.key?(room_type)
+    return 'error' unless ROOM_TYPE_DETAILS.key?(room_type)
     return 'error' unless valid_date?(date)
-    
+
+    room_type_details = ROOM_TYPE_DETAILS[room_type]
     parsed_date = Date.strptime(date, '%Y-%m-%d')
 
-    room_name = ROOM_TYPE_NAME_BASE_PRICE[room_type][:room_name]
-    base_price = ROOM_TYPE_NAME_BASE_PRICE[room_type][:base_price]
-
-    final_price = apply_rate(base_price, parsed_date, user)
+    room_name = room_type_details[:room_name]
+    final_price = apply_rate(room_type_details[:base_price], parsed_date, user)
 
     "#{room_name} reserved for #{date}. Price: #{format('%.2f', final_price)}"
   end
