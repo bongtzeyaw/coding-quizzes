@@ -1,23 +1,19 @@
 class ReservationSystem
+  ROOM_TYPE_NAME_BASE_PRICE = {
+    1 => {room_name: "Single room", base_price: 8000},
+    2 => {room_name: "Double room", base_price: 12000},
+    3 => {room_name: "Suite", base_price: 20000}
+  }
+
   def check_reservation(user, room_type, date)
     return 'error' if user.nil?
+    return 'error' unless [1, 2, 3].include?(room_type)
     return 'error' unless check_date(date)
 
-    if room_type == 1
-      price = 8000
-      "Single room reserved for #{date}. Price: #{apply_rate(price, date, user)}"
+    base_price = ROOM_TYPE_NAME_BASE_PRICE[room_type][:base_price]
+    room_name = ROOM_TYPE_NAME_BASE_PRICE[room_type][:room_name]
 
-    elsif room_type == 2
-      price = 12_000
-      "Double room reserved for #{date}. Price: #{apply_rate(price, date, user)}"
-
-    elsif room_type == 3
-      price = 20_000
-      "Suite reserved for #{date}. Price: #{apply_rate(price, date, user)}"
-
-    else
-      'error'
-    end
+    "#{room_name} reserved for #{date}. Price: #{apply_rate(base_price, date, user)}"
   end
 
   private
