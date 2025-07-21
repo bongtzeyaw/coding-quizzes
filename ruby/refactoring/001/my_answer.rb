@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require 'date'
 
 class ReservationSystem
@@ -5,7 +7,7 @@ class ReservationSystem
     1 => { room_name: 'Single room', base_price: 8_000.00 },
     2 => { room_name: 'Double room', base_price: 12_000.00 },
     3 => { room_name: 'Suite', base_price: 20_000.00 }
-  }
+  }.freeze
 
   def check_reservation(user, room_type, date)
     return 'error' if user.nil?
