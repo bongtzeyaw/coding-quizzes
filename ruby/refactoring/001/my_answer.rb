@@ -9,7 +9,7 @@ class ReservationSystem
 
   def check_reservation(user, room_type, date)
     return 'error' if user.nil?
-    return 'error' unless [1, 2, 3].include?(room_type)
+    return 'error' unless ROOM_TYPE_NAME_BASE_PRICE.key?(room_type)
     return 'error' unless check_date(date)
     
     parsed_date = Date.strptime(date, '%Y-%m-%d')
