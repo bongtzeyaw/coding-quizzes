@@ -1,3 +1,5 @@
+require 'date'
+
 class ReservationSystem
   ROOM_TYPE_NAME_BASE_PRICE = {
     1 => {room_name: "Single room", base_price: 8000},
@@ -9,21 +11,26 @@ class ReservationSystem
     return 'error' if user.nil?
     return 'error' unless [1, 2, 3].include?(room_type)
     return 'error' unless check_date(date)
+    
+    parsed_date = Date.strptime(date, '%Y-%m-%d')
 
     base_price = ROOM_TYPE_NAME_BASE_PRICE[room_type][:base_price]
     room_name = ROOM_TYPE_NAME_BASE_PRICE[room_type][:room_name]
 
-    "#{room_name} reserved for #{date}. Price: #{apply_rate(base_price, date, user)}"
+    "#{room_name} reserved for #{date}. Price: #{apply_rate(base_price, parsed_date, user)}"
   end
 
   private
 
   def check_date(date)
-    date[0..3].to_i >= 2024 && date[5..6].to_i >= 1 && date[5..6].to_i <= 12 && date[8..9].to_i >= 1 && date[8..9].to_i <= 31
+    parsed_date = Date.strptime(date, '%Y-%m-%d')
+    parsed_date.year >= 2024
+  rescue ArgumentError
+    false
   end
 
-  def apply_rate(price, date, user)
-    price *= 1.5 if date[5..6] == '08'
+  def apply_rate(price, parsed_date, user)
+    price *= 1.5 if parsed_date.month == 8
     price *= 0.9 if user[0] == 'G'
     price
   end
