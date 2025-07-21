@@ -10,7 +10,7 @@ class ReservationSystem
   def check_reservation(user, room_type, date)
     return 'error' if user.nil?
     return 'error' unless ROOM_TYPE_NAME_BASE_PRICE.key?(room_type)
-    return 'error' unless check_date(date)
+    return 'error' unless valid_date?(date)
     
     parsed_date = Date.strptime(date, '%Y-%m-%d')
 
@@ -24,7 +24,7 @@ class ReservationSystem
 
   private
 
-  def check_date(date)
+  def valid_date?(date)
     parsed_date = Date.strptime(date, '%Y-%m-%d')
     parsed_date.year >= 2024
   rescue ArgumentError
