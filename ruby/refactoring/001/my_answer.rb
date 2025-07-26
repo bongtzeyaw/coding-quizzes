@@ -22,24 +22,27 @@ class ReservationSystem
     return 'error' unless valid_date?(date)
 
     room_type_details = ROOM_TYPE_DETAILS[room_type]
-    parsed_date = Date.strptime(date, '%Y-%m-%d')
-
     room_name = room_type_details[:room_name]
-    final_price = apply_rate(room_type_details[:base_price], parsed_date, user)
+    final_price = apply_rate(room_type_details[:base_price], date, user)
 
     "#{room_name} reserved for #{date}. Price: #{format('%.2f', final_price)}"
   end
 
   private
 
+  def parse_date(date)
+    Date.strptime(date, '%Y-%m-%d')
+  end
+
   def valid_date?(date)
-    parsed_date = Date.strptime(date, '%Y-%m-%d')
+    parsed_date = parse_date(date)
     parsed_date.year >= MIN_RESERVATION_YEAR
   rescue ArgumentError
     false
   end
 
-  def apply_rate(base_price, parsed_date, user)
+  def apply_rate(base_price, date, user)
+    parsed_date = parse_date(date)
     august_surcharge = parsed_date.month == 8 ? AUGUST_SEASONAL_RATE : DEFAULT_SEASONAL_RATE
     guest_discount = user[0] == 'G' ? GUEST_DISCOUNT_RATE : DEFAULT_DISCOUNT_RATE
 
