@@ -9,6 +9,11 @@ class ReservationSystem
     3 => { room_name: 'Suite', base_price: 20_000.00 }
   }.freeze
 
+  DEFAULT_SEASONAL_RATE = 1.00
+  AUGUST_SEASONAL_RATE = 1.50
+  DEFAULT_DISCOUNT_RATE = 1.00
+  GUEST_DISCOUNT_RATE = 0.90
+
   def check_reservation(user, room_type, date)
     return 'error' if user.nil?
     return 'error' unless ROOM_TYPE_DETAILS.key?(room_type)
@@ -33,8 +38,8 @@ class ReservationSystem
   end
 
   def apply_rate(base_price, parsed_date, user)
-    august_surcharge = parsed_date.month == 8 ? 1.50 : 1.00
-    guest_discount = user[0] == 'G' ? 0.90 : 1.00
+    august_surcharge = parsed_date.month == 8 ? AUGUST_SEASONAL_RATE : DEFAULT_SEASONAL_RATE
+    guest_discount = user[0] == 'G' ? GUEST_DISCOUNT_RATE : DEFAULT_DISCOUNT_RATE
 
     base_price * august_surcharge * guest_discount
   end
