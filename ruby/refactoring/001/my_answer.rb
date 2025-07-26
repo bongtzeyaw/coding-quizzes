@@ -14,6 +14,8 @@ class ReservationSystem
   DEFAULT_DISCOUNT_RATE = 1.00
   GUEST_DISCOUNT_RATE = 0.90
 
+  MIN_RESERVATION_YEAR = 2024
+
   def check_reservation(user, room_type, date)
     return 'error' if user.nil?
     return 'error' unless ROOM_TYPE_DETAILS.key?(room_type)
@@ -32,7 +34,7 @@ class ReservationSystem
 
   def valid_date?(date)
     parsed_date = Date.strptime(date, '%Y-%m-%d')
-    parsed_date.year >= 2024
+    parsed_date.year >= MIN_RESERVATION_YEAR
   rescue ArgumentError
     false
   end
