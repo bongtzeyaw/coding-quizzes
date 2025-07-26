@@ -2,13 +2,41 @@
 
 require 'date'
 
-class ReservationSystem
-  ROOM_TYPE_DETAILS = {
-    1 => { room_name: 'Single room', base_price: 8_000.00 },
-    2 => { room_name: 'Double room', base_price: 12_000.00 },
-    3 => { room_name: 'Suite', base_price: 20_000.00 }
-  }.freeze
+class RoomDetail
+  VALID_ROOM_TYPES = [1, 2, 3].freeze
 
+  def initialize(room_type)
+    raise ArgumentError, 'Invalid room type' unless valid_room?(room_type)
+
+    @room_type = room_type
+  end
+
+  def room_name
+    case @room_type
+    when 1 then 'Single room'
+    when 2 then 'Double room'
+    when 3 then 'Suite'
+    else raise ArgumentError, 'Invalid room type'
+    end
+  end
+
+  def base_price
+    case @room_type
+    when 1 then 8_000.00
+    when 2 then 12_000.00
+    when 3 then 20_000.00
+    else raise ArgumentError, 'Invalid room type'
+    end
+  end
+
+  private
+
+  def valid_room?(room_type)
+    VALID_ROOM_TYPES.include?(room_type)
+  end
+end
+
+class ReservationSystem
   DEFAULT_SEASONAL_RATE = 1.00
   AUGUST_SEASONAL_RATE = 1.50
   DEFAULT_DISCOUNT_RATE = 1.00
@@ -18,12 +46,12 @@ class ReservationSystem
 
   def check_reservation(user, room_type, date)
     return 'error' if user.nil?
-    return 'error' unless ROOM_TYPE_DETAILS.key?(room_type)
+    return 'error' unless valid_room_type?(room_type)
     return 'error' unless valid_date?(date)
 
-    room_type_details = ROOM_TYPE_DETAILS[room_type]
-    room_name = room_type_details[:room_name]
-    final_price = apply_rate(room_type_details[:base_price], date, user)
+    room_detail = RoomDetail.new(room_type)
+    room_name = room_detail.room_name
+    final_price = apply_rate(room_detail.base_price, date, user)
 
     "#{room_name} reserved for #{date}. Price: #{format('%.2f', final_price)}"
   end
@@ -32,6 +60,12 @@ class ReservationSystem
 
   def parse_date(date)
     Date.strptime(date, '%Y-%m-%d')
+  end
+
+  def valid_room_type?(room_type)
+    RoomDetail.new(room_type)
+  rescue ArgumentError
+    false
   end
 
   def valid_date?(date)
