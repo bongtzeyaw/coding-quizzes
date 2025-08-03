@@ -1,6 +1,8 @@
 # frozen_string_literal: true
 
 class GameCharacter
+  DEFAULT_DEFENSE_MULTIPLIER = 0.5
+
   def initialize(hp:, mp:, attack:, defense:, skills:)
     @hp = hp
     @mp = mp
@@ -10,42 +12,8 @@ class GameCharacter
   end
 
   def attack_enemy(enemy, skill)
-    damage = 0
-    if @type == 'warrior'
-      if skill == 'slash'
-        if @mp >= 5
-          @mp -= 5
-          damage = @attack * 1.5
-        end
-      elsif skill == 'normal'
-        damage = @attack
-      end
-    elsif @type == 'wizard'
-      if skill == 'fireball'
-        if @mp >= 15
-          @mp -= 15
-          damage = @attack * 3
-        end
-      elsif skill == 'normal'
-        damage = @attack
-      end
-    elsif @type == 'archer'
-      if skill == 'multishot'
-        if @mp >= 10
-          @mp -= 10
-          damage = @attack * 2
-        end
-      elsif skill == 'normal'
-        damage = @attack
-      end
-    end
-
-    damage -= enemy.instance_variable_get(:@defense) * 0.5 if enemy.instance_variable_get(:@defense) > 0
-
-    damage = 0 if damage < 0
-
-    enemy.instance_variable_set(:@hp, enemy.instance_variable_get(:@hp) - damage)
-    damage
+    damage = calculate_damage(skill)
+    enemy.receive_damage!(damage)
   end
 
   def level_up
@@ -59,12 +27,56 @@ class GameCharacter
 
   private
 
+  def attack_skill_details
+    self.class::ATTACK_SKILLS_DETAIL
+  end
+
   def level_up_increments
     self.class::LEVEL_UP_STATS_INCREMENTS
+  end
+
+  def consume_mp!(mp_cost)
+    return false if @mp < mp_cost
+
+    @mp -= mp_cost
+    true
+  end
+
+  def calculate_normal_attack_damage
+    @attack
+  end
+
+  def calculate_special_attack_damage(skill)
+    attack_skill_detail = attack_skill_details[skill]
+    return 0 unless attack_skill_detail && consume_mp!(attack_skill_detail[:mp_cost])
+
+    @attack * attack_skill_detail[:attack_multiplier]
+  end
+
+  def calculate_damage(skill)
+    if skill == 'normal'
+      calculate_normal_attack_damage
+    else
+      calculate_special_attack_damage(skill)
+    end
+  end
+
+  protected
+
+  def receive_damage!(damage)
+    mitigated_damage = damage - @defense * DEFAULT_DEFENSE_MULTIPLIER if @defense.positive?
+    mitigated_damage = 0 if mitigated_damage.negative?
+
+    @hp -= mitigated_damage
+    mitigated_damage
   end
 end
 
 class Warrior < GameCharacter
+  ATTACK_SKILLS_DETAIL = {
+    'slash' => { mp_cost: 5, attack_multiplier: 1.5 }
+  }.freeze
+
   LEVEL_UP_STATS_INCREMENTS = {
     hp: 30,
     mp: 5,
@@ -84,6 +96,10 @@ class Warrior < GameCharacter
 end
 
 class Wizard < GameCharacter
+  ATTACK_SKILLS_DETAIL = {
+    'fireball' => { mp_cost: 15, attack_multiplier: 3 }
+  }.freeze
+
   LEVEL_UP_STATS_INCREMENTS = {
     hp: 15,
     mp: 20,
@@ -103,6 +119,10 @@ class Wizard < GameCharacter
 end
 
 class Archer < GameCharacter
+  ATTACK_SKILLS_DETAIL = {
+    'multishot' => { mp_cost: 10, attack_multiplier: 2 }
+  }.freeze
+
   LEVEL_UP_STATS_INCREMENTS = {
     hp: 20,
     mp: 10,
