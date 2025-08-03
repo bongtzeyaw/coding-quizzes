@@ -1,25 +1,10 @@
 class GameCharacter
-  def initialize(type)
-    @type = type
-    if type == 'warrior'
-      @hp = 150
-      @mp = 30
-      @attack = 25
-      @defense = 20
-      @skills = %w[slash guard]
-    elsif type == 'wizard'
-      @hp = 80
-      @mp = 120
-      @attack = 10
-      @defense = 8
-      @skills = %w[fireball heal]
-    elsif type == 'archer'
-      @hp = 100
-      @mp = 50
-      @attack = 20
-      @defense = 12
-      @skills = %w[arrow multishot]
-    end
+  def initialize(hp:, mp:, attack:, defense:, skills:)
+    @hp = hp
+    @mp = mp
+    @attack = attack
+    @defense = defense
+    @skills = skills
   end
 
   def attack_enemy(enemy, skill)
@@ -78,5 +63,41 @@ class GameCharacter
       @attack += 4
       @defense += 3
     end
+  end
+end
+
+class Warrior < GameCharacter
+  def initialize
+    super(
+      hp: 150,
+      mp: 30,
+      attack: 25,
+      defense: 20,
+      skills: %w[slash guard]
+    )
+  end
+end
+
+class Wizard < GameCharacter
+  def initialize
+    super(
+      hp: 80,
+      mp: 120,
+      attack: 10,
+      defense: 8,
+      skills: %w[fireball heal]
+    )
+  end
+end
+
+class Archer < GameCharacter
+  def initialize
+    super(
+      hp: 100,
+      mp: 50,
+      attack: 20,
+      defense: 12,
+      skills: %w[arrow multishot]
+    )
   end
 end
