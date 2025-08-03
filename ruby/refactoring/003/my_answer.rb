@@ -1,6 +1,37 @@
+# frozen_string_literal: true
+
+class SalesRecord
+  VALID_STATUSES = %w[completed cancelled].freeze
+  VALID_CATEGORIES = %w[a b].freeze
+
+  attr_reader :amount, :status, :category, :is_vip
+
+  def initialize(amount:, status:, category:, is_vip:)
+    raise ArgumentError, 'Invalid amount' unless amount.is_a?(Integer) && amount.positive?
+    raise ArgumentError, 'Invalid status' unless VALID_STATUSES.include?(status)
+    raise ArgumentError, 'Invalid category' unless VALID_CATEGORIES.include?(category)
+    raise ArgumentError, 'Invalid is_vip' unless [true, false].include?(is_vip)
+
+    @amount = amount
+    @status = status
+    @category = category
+    @is_vip = is_vip
+  end
+end
+
+class SalesRecordCollection
+  def initialize(sales_data)
+    raise ArgumentError, 'Invalid sales data' unless sales_data.is_a?(Array)
+
+    @sales_records = sales_data.map { |sales_record_data| SalesRecord.new(**sales_record_data) }
+  end
+end
+
 class SalesReport
   def generate_report(sales_data)
     result = {}
+
+    sales_record_collection = SalesRecordCollection.new(sales_data)
 
     total = 0
     for i in 0..sales_data.length - 1
