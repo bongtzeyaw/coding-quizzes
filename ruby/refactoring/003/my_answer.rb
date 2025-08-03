@@ -50,41 +50,37 @@ class SalesRecordCollection
   def extract_column(attribute)
     @sales_records.map { |sales_record| sales_record.public_send(attribute) }
   end
+
+  def group_by(attribute)
+    @sales_records.group_by { |sales_record| sales_record.public_send(attribute) }
+  end
 end
 
 class SalesReport
   def generate_report(sales_data)
-    result = {}
-
     sales_record_collection = SalesRecordCollection.new(sales_data)
     completed_sales_record_collection = sales_record_collection.filter_by(:status, 'cancelled', negation: true)
     completed_sales_amounts = completed_sales_record_collection.extract_column(:amount)
 
-    total_sales = completed_sales_amounts.sum  
-    result[:total] = total_sales
-
+    total_sales = completed_sales_amounts.sum
     average_sales = completed_sales_amounts.empty? ? 0 : total_sales / completed_sales_amounts.size
-    result[:average] = average_sales
-
     max_sales = completed_sales_amounts.max
-    result[:max] = max_sales
+    sales_by_category = calculate_sales_by_category(completed_sales_record_collection)
+    vip_sales = completed_sales_record_collection.filter_by(:is_vip, true).extract_column(:amount).sum
 
-    categories = {}
-    for i in 0..sales_data.length - 1
-      next unless sales_data[i][:status] != 'cancelled'
+    {
+      total: total_sales,
+      average: average_sales,
+      max: max_sales,
+      by_category: sales_by_category,
+      vip_sales: vip_sales
+    }
+  end
 
-      cat = sales_data[i][:category]
-      categories[cat] = 0 if categories[cat].nil?
-      categories[cat] = categories[cat] + sales_data[i][:amount]
-    end
-    result[:by_category] = categories
+  private
 
-    vip_total = 0
-    for i in 0..sales_data.length - 1
-      vip_total += sales_data[i][:amount] if sales_data[i][:status] != 'cancelled' && sales_data[i][:is_vip] == true
-    end
-    result[:vip_sales] = vip_total
-
-    result
+  def calculate_sales_by_category(sales_record_collection)
+    sales_record_collection.group_by(:category)
+                           .transform_values { |sales_record_list| sales_record_list.sum(&:amount) }
   end
 end
