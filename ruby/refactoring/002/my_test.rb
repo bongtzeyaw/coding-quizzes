@@ -1,15 +1,15 @@
 require 'minitest/autorun'
-require_relative 'quiz'
+require_relative 'my_answer'
 
 class TestGameCharacter < Minitest::Test
   def setup
-    @warrior = GameCharacter.new('warrior')
-    @wizard = GameCharacter.new('wizard')
-    @archer = GameCharacter.new('archer')
+    @warrior = Warrior.new
+    @wizard = Wizard.new
+    @archer = Archer.new
 
-    @enemy_warrior = GameCharacter.new('warrior')
-    @enemy_wizard = GameCharacter.new('wizard')
-    @enemy_archer = GameCharacter.new('archer')
+    @enemy_warrior = Warrior.new
+    @enemy_wizard = Wizard.new
+    @enemy_archer = Archer.new
 
     @enemy_warrior.instance_variable_set(:@hp, 100)
     @enemy_warrior.instance_variable_set(:@defense, 10)
@@ -157,10 +157,10 @@ class TestGameCharacter < Minitest::Test
   end
 
   def test_attack_damage_cannot_be_negative
-    weak_character = GameCharacter.new('warrior')
+    weak_character = Warrior.new
     weak_character.instance_variable_set(:@attack, 1)
 
-    tough_enemy = GameCharacter.new('warrior')
+    tough_enemy = Warrior.new
     tough_enemy.instance_variable_set(:@hp, 100)
     tough_enemy.instance_variable_set(:@defense, 100)
 
