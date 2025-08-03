@@ -25,6 +25,31 @@ class SalesRecordCollection
 
     @sales_records = sales_data.map { |sales_record_data| SalesRecord.new(**sales_record_data) }
   end
+
+  def filter_by(attribute, value, negation: false)
+    filtered_sales_records = @sales_records.filter do |sales_record|
+      if negation
+        sales_record.public_send(attribute) != value
+      else
+        sales_record.public_send(attribute) == value
+      end
+    end
+
+    SalesRecordCollection.new(
+      filtered_sales_records.map do |sales_record|
+        {
+          amount: sales_record.amount,
+          status: sales_record.status,
+          category: sales_record.category,
+          is_vip: sales_record.is_vip
+        }
+      end
+    )
+  end
+
+  def extract_column(attribute)
+    @sales_records.map { |sales_record| sales_record.public_send(attribute) }
+  end
 end
 
 class SalesReport
@@ -32,30 +57,17 @@ class SalesReport
     result = {}
 
     sales_record_collection = SalesRecordCollection.new(sales_data)
+    completed_sales_record_collection = sales_record_collection.filter_by(:status, 'cancelled', negation: true)
+    completed_sales_amounts = completed_sales_record_collection.extract_column(:amount)
 
-    total = 0
-    for i in 0..sales_data.length - 1
-      total += sales_data[i][:amount] if sales_data[i][:status] != 'cancelled'
-    end
-    result[:total] = total
+    total_sales = completed_sales_amounts.sum  
+    result[:total] = total_sales
 
-    count = 0
-    for i in 0..sales_data.length - 1
-      count += 1 if sales_data[i][:status] != 'cancelled'
-    end
-    result[:average] = if count > 0
-                         total / count
-                       else
-                         0
-                       end
+    average_sales = completed_sales_amounts.empty? ? 0 : total_sales / completed_sales_amounts.size
+    result[:average] = average_sales
 
-    max = nil
-    for i in 0..sales_data.length - 1
-      next unless sales_data[i][:status] != 'cancelled'
-
-      max = sales_data[i][:amount] if max.nil? || sales_data[i][:amount] > max
-    end
-    result[:max] = max
+    max_sales = completed_sales_amounts.max
+    result[:max] = max_sales
 
     categories = {}
     for i in 0..sales_data.length - 1
