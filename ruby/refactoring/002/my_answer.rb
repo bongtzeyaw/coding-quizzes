@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 class GameCharacter
   def initialize(hp:, mp:, attack:, defense:, skills:)
     @hp = hp
@@ -47,26 +49,29 @@ class GameCharacter
   end
 
   def level_up
-    if @type == 'warrior'
-      @hp += 30
-      @mp += 5
-      @attack += 5
-      @defense += 4
-    elsif @type == 'wizard'
-      @hp += 15
-      @mp += 20
-      @attack += 3
-      @defense += 2
-    elsif @type == 'archer'
-      @hp += 20
-      @mp += 10
-      @attack += 4
-      @defense += 3
-    end
+    increments = level_up_increments
+
+    @hp += increments[:hp]
+    @mp += increments[:mp]
+    @attack += increments[:attack]
+    @defense += increments[:defense]
+  end
+
+  private
+
+  def level_up_increments
+    self.class::LEVEL_UP_STATS_INCREMENTS
   end
 end
 
 class Warrior < GameCharacter
+  LEVEL_UP_STATS_INCREMENTS = {
+    hp: 30,
+    mp: 5,
+    attack: 5,
+    defense: 4
+  }.freeze
+
   def initialize
     super(
       hp: 150,
@@ -79,6 +84,13 @@ class Warrior < GameCharacter
 end
 
 class Wizard < GameCharacter
+  LEVEL_UP_STATS_INCREMENTS = {
+    hp: 15,
+    mp: 20,
+    attack: 3,
+    defense: 2
+  }.freeze
+
   def initialize
     super(
       hp: 80,
@@ -91,6 +103,13 @@ class Wizard < GameCharacter
 end
 
 class Archer < GameCharacter
+  LEVEL_UP_STATS_INCREMENTS = {
+    hp: 20,
+    mp: 10,
+    attack: 4,
+    defense: 3
+  }.freeze
+
   def initialize
     super(
       hp: 100,
