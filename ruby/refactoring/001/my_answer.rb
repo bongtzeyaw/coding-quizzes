@@ -3,7 +3,20 @@
 require 'date'
 
 class RoomDetail
-  VALID_ROOM_TYPES = [1, 2, 3].freeze
+  ROOM_DETAIL_MAP = {
+    1 => {
+      name: 'Single room',
+      price: 8_000.00
+    },
+    2 => {
+      name: 'Double room',
+      price: 12_000.00
+    },
+    3 => {
+      name: 'Suite',
+      price: 20_000.00
+    }
+  }.freeze
 
   def initialize(room_type)
     raise ArgumentError, 'Invalid room type' unless valid_room?(room_type)
@@ -12,27 +25,17 @@ class RoomDetail
   end
 
   def room_name
-    case @room_type
-    when 1 then 'Single room'
-    when 2 then 'Double room'
-    when 3 then 'Suite'
-    else raise ArgumentError, 'Invalid room type'
-    end
+    ROOM_DETAIL_MAP[@room_type][:name]
   end
 
   def base_price
-    case @room_type
-    when 1 then 8_000.00
-    when 2 then 12_000.00
-    when 3 then 20_000.00
-    else raise ArgumentError, 'Invalid room type'
-    end
+    ROOM_DETAIL_MAP[@room_type][:price]
   end
 
   private
 
   def valid_room?(room_type)
-    VALID_ROOM_TYPES.include?(room_type)
+    ROOM_DETAIL_MAP.keys.include?(room_type)
   end
 end
 
