@@ -59,28 +59,39 @@ end
 class SalesReport
   def generate_report(sales_data)
     sales_record_collection = SalesRecordCollection.new(sales_data)
+
     completed_sales_record_collection = sales_record_collection.filter_by(:status, 'cancelled', negation: true)
     completed_sales_amounts = completed_sales_record_collection.extract_column(:amount)
 
-    total_sales = completed_sales_amounts.sum
-    average_sales = completed_sales_amounts.empty? ? 0 : total_sales / completed_sales_amounts.size
-    max_sales = completed_sales_amounts.max
-    sales_by_category = calculate_sales_by_category(completed_sales_record_collection)
-    vip_sales = completed_sales_record_collection.filter_by(:is_vip, true).extract_column(:amount).sum
-
     {
-      total: total_sales,
-      average: average_sales,
-      max: max_sales,
-      by_category: sales_by_category,
-      vip_sales: vip_sales
+      total: calculate_total_sales(completed_sales_amounts),
+      average: calculate_average_sales(completed_sales_amounts),
+      max: calculate_max_sales(completed_sales_amounts),
+      by_category: calculate_sales_by_category(completed_sales_record_collection),
+      vip_sales: calculate_vip_sales(completed_sales_record_collection)
     }
   end
 
   private
 
+  def calculate_total_sales(sales_amounts)
+    sales_amounts.sum
+  end
+
+  def calculate_average_sales(sales_amounts)
+    sales_amounts.empty? ? 0 : sales_amounts.sum / sales_amounts.size
+  end
+
+  def calculate_max_sales(sales_amounts)
+    sales_amounts.max
+  end
+
   def calculate_sales_by_category(sales_record_collection)
     sales_record_collection.group_by(:category)
                            .transform_values { |sales_record_list| sales_record_list.sum(&:amount) }
+  end
+
+  def calculate_vip_sales(sales_record_collection)
+    sales_record_collection.filter_by(:is_vip, true).extract_column(:amount).sum
   end
 end
