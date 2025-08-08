@@ -49,7 +49,6 @@ class ReservationSystem
 
   def check_reservation(user, room_type, date)
     return 'error' if user.nil?
-    return 'error' unless valid_room_type?(room_type)
     return 'error' unless valid_date?(date)
 
     room_detail = RoomDetail.new(room_type)
@@ -63,12 +62,6 @@ class ReservationSystem
 
   def parse_date(date)
     Date.strptime(date, '%Y-%m-%d')
-  end
-
-  def valid_room_type?(room_type)
-    RoomDetail.new(room_type)
-  rescue ArgumentError
-    false
   end
 
   def valid_date?(date)

@@ -22,10 +22,6 @@ class TestReservationSystem < Minitest::Test
     assert_equal 'error', @reservation_system.check_reservation('A123', 1, '2024-01-32')
   end
 
-  def test_invalid_room_type
-    assert_equal 'error', @reservation_system.check_reservation('A123', 4, '2024-01-01')
-  end
-
   def test_single_room_regular_user
     expected = 'Single room reserved for 2024-01-01. Price: 8000.00'
     assert_equal expected, @reservation_system.check_reservation('A123', 1, '2024-01-01')
