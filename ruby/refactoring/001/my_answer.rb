@@ -19,12 +19,9 @@ class RoomDetail
   }.freeze
 
   def initialize(room_type)
-    raise ArgumentError, 'Invalid room type' unless self.class.valid_room_type?(room_type)
-    @room_type = room_type
-  end
+    raise ArgumentError, 'Invalid room type' unless valid_room?(room_type)
 
-  def self.valid_room_type?(room_type)
-    ROOM_DETAIL_MAP.key?(room_type)
+    @room_type = room_type
   end
 
   def room_name
@@ -33,6 +30,12 @@ class RoomDetail
 
   def base_price
     ROOM_DETAIL_MAP[@room_type][:price]
+  end
+
+  private
+
+  def valid_room?(room_type)
+    ROOM_DETAIL_MAP.keys.include?(room_type)
   end
 end
 
@@ -46,7 +49,7 @@ class ReservationSystem
 
   def check_reservation(user, room_type, date)
     return 'error' if user.nil?
-    return 'error' unless RoomDetail.valid_room_type?(room_type)
+    return 'error' unless valid_room_type?(room_type)
     return 'error' unless valid_date?(date)
 
     room_detail = RoomDetail.new(room_type)
@@ -60,6 +63,12 @@ class ReservationSystem
 
   def parse_date(date)
     Date.strptime(date, '%Y-%m-%d')
+  end
+
+  def valid_room_type?(room_type)
+    RoomDetail.new(room_type)
+  rescue ArgumentError
+    false
   end
 
   def valid_date?(date)
