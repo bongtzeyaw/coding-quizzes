@@ -67,8 +67,8 @@ class SalesReport
       total: calculate_total_sales(completed_sales_amounts),
       average: calculate_average_sales(completed_sales_amounts),
       max: calculate_max_sales(completed_sales_amounts),
-      by_category: calculate_sales_by_category(completed_sales_record_collection),
-      vip_sales: calculate_vip_sales(completed_sales_record_collection)
+      by_category: calculate_total_sales_by_category(completed_sales_record_collection),
+      vip_sales: calculate_vip_total_sales(completed_sales_record_collection)
     }
   end
 
@@ -86,12 +86,12 @@ class SalesReport
     sales_amounts.max
   end
 
-  def calculate_sales_by_category(sales_record_collection)
+  def calculate_total_sales_by_category(sales_record_collection)
     sales_record_collection.group_by(:category)
                            .transform_values { |sales_record_list| sales_record_list.sum(&:amount) }
   end
 
-  def calculate_vip_sales(sales_record_collection)
+  def calculate_vip_total_sales(sales_record_collection)
     sales_record_collection.filter_by(:is_vip, true).extract_column(:amount).sum
   end
 end
