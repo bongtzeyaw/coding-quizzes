@@ -7,21 +7,39 @@ class SalesRecord
   attr_reader :amount, :status, :category, :is_vip
 
   def initialize(amount:, status:, category:, is_vip:)
-    raise ArgumentError, 'Invalid amount' unless amount.is_a?(Integer) && amount.positive?
-    raise ArgumentError, 'Invalid status' unless VALID_STATUSES.include?(status)
-    raise ArgumentError, 'Invalid category' unless VALID_CATEGORIES.include?(category)
-    raise ArgumentError, 'Invalid is_vip' unless [true, false].include?(is_vip)
+    raise ArgumentError, 'Invalid amount' unless validate_amount(amount)
+    raise ArgumentError, 'Invalid status' unless validate_status(status)
+    raise ArgumentError, 'Invalid category' unless validate_category(category)
+    raise ArgumentError, 'Invalid is_vip' unless validate_is_vip(is_vip)
 
     @amount = amount
     @status = status
     @category = category
     @is_vip = is_vip
   end
+
+  private
+
+  def validate_amount(amount)
+    amount.is_a?(Integer) && amount.positive?
+  end
+
+  def validate_status(status)
+    VALID_STATUSES.include?(status)
+  end
+
+  def validate_category(category)
+    VALID_CATEGORIES.include?(category)
+  end
+
+  def validate_is_vip(is_vip)
+    [true, false].include?(is_vip)
+  end
 end
 
 class SalesRecordCollection
   def initialize(sales_data)
-    raise ArgumentError, 'Invalid sales data' unless sales_data.is_a?(Array)
+    raise ArgumentError, 'Invalid sales data' unless validate_sales_data(sales_data)
 
     @sales_records = sales_data.map { |sales_record_data| SalesRecord.new(**sales_record_data) }
   end
@@ -53,6 +71,12 @@ class SalesRecordCollection
 
   def group_by(attribute)
     @sales_records.group_by { |sales_record| sales_record.public_send(attribute) }
+  end
+
+  private
+
+  def validate_sales_data(sales_data)
+    sales_data.is_a?(Array)
   end
 end
 
