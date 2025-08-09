@@ -21,15 +21,15 @@ class WeatherAPI
 
   WEATHER_METRICS_UNIT = {
     'temperature' => "\u00b0C",
-    'humidity' => '%',
-    'wind_speed' => 'km/h'
+    'humidity'    => '%',
+    'wind_speed'  => 'km/h'
   }
 
   WEATHER_METRICS_DISPLAYED_LABEL = {
     'temperature' => 'Temperature',
     'description' => 'Description',
-    'humidity' => 'Humidity',
-    'wind_speed' => 'Wind'
+    'humidity'    => 'Humidity',
+    'wind_speed'  => 'Wind'
   }
 
   def get_weather(city)
