@@ -168,6 +168,36 @@ class TestGameCharacter < Minitest::Test
     assert_equal 100, tough_enemy.instance_variable_get(:@hp)
   end
 
+  def test_attack_when_defense_is_zero
+    weak_character = Warrior.new
+    weak_character.instance_variable_set(:@attack, 1)
+
+    weak_enemy = Warrior.new
+    weak_enemy.instance_variable_set(:@hp, 100)
+    weak_enemy.instance_variable_set(:@defense, 0)
+
+    expected_damage = 1.0
+    returned_damage = weak_character.attack_enemy(weak_enemy, 'normal')
+
+    assert_equal expected_damage, returned_damage
+    assert_equal 99, weak_enemy.instance_variable_get(:@hp)
+  end
+
+  def test_attack_when_defense_is_negative
+    weak_character = Warrior.new
+    weak_character.instance_variable_set(:@attack, 1)
+
+    irregular_enemy = Warrior.new
+    irregular_enemy.instance_variable_set(:@hp, 100)
+    irregular_enemy.instance_variable_set(:@defense, -1)
+
+    expected_damage = 1.0
+    returned_damage = weak_character.attack_enemy(irregular_enemy, 'normal')
+
+    assert_equal expected_damage, returned_damage
+    assert_equal 99, irregular_enemy.instance_variable_get(:@hp)
+  end
+
   def test_warrior_level_up
     @warrior.level_up
     assert_equal 180, @warrior.instance_variable_get(:@hp)
