@@ -7,12 +7,11 @@ class GameCharacter
 
   DEFAULT_DEFENSE_MULTIPLIER = 0.5
 
-  def initialize(hp:, mp:, attack:, defense:, skills:)
+  def initialize(hp:, mp:, attack:, defense:)
     @hp = hp
     @mp = mp
     @attack = attack
     @defense = defense
-    @skills = skills
   end
 
   def attack_enemy(enemy, skill)
@@ -91,8 +90,7 @@ class Warrior < GameCharacter
       hp: 150,
       mp: 30,
       attack: 25,
-      defense: 20,
-      skills: %w[slash guard]
+      defense: 20
     )
   end
 end
@@ -114,8 +112,7 @@ class Wizard < GameCharacter
       hp: 80,
       mp: 120,
       attack: 10,
-      defense: 8,
-      skills: %w[fireball heal]
+      defense: 8
     )
   end
 end
@@ -137,8 +134,7 @@ class Archer < GameCharacter
       hp: 100,
       mp: 50,
       attack: 20,
-      defense: 12,
-      skills: %w[arrow multishot]
+      defense: 12
     )
   end
 end

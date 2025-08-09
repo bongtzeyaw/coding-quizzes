@@ -26,7 +26,6 @@ class TestGameCharacter < Minitest::Test
     assert_equal 30, @warrior.instance_variable_get(:@mp)
     assert_equal 25, @warrior.instance_variable_get(:@attack)
     assert_equal 20, @warrior.instance_variable_get(:@defense)
-    assert_equal %w[slash guard], @warrior.instance_variable_get(:@skills)
   end
 
   def test_wizard_initialization
@@ -34,7 +33,6 @@ class TestGameCharacter < Minitest::Test
     assert_equal 120, @wizard.instance_variable_get(:@mp)
     assert_equal 10, @wizard.instance_variable_get(:@attack)
     assert_equal 8, @wizard.instance_variable_get(:@defense)
-    assert_equal %w[fireball heal], @wizard.instance_variable_get(:@skills)
   end
 
   def test_archer_initialization
@@ -42,7 +40,6 @@ class TestGameCharacter < Minitest::Test
     assert_equal 50, @archer.instance_variable_get(:@mp)
     assert_equal 20, @archer.instance_variable_get(:@attack)
     assert_equal 12, @archer.instance_variable_get(:@defense)
-    assert_equal %w[arrow multishot], @archer.instance_variable_get(:@skills)
   end
 
   def test_warrior_normal_attack
