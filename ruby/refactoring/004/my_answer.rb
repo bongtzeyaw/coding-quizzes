@@ -59,30 +59,18 @@ class WeatherAPI
 
   private
 
-  def valid_city_input?(city)
-    return false unless city
-
-    !city.empty?
-  end
-
-  def valid_days_input?(days)
-    return false unless days
-
-    days.is_a?(Integer) && days.between?(2, 6)
-  end
-
-  def build_uri(path, query_params = {})
-    uri = URI.join(BASE_PATH, path)
-    uri.query = URI.encode_www_form(query_params) unless query_params.empty?
-    uri
-  end
-
   def with_error_handling
     yield
   rescue WeatherAPIError => e
     e.message
   rescue StandardError => e
     "Error: #{e.message}"
+  end
+
+  def build_uri(path, query_params = {})
+    uri = URI.join(BASE_PATH, path)
+    uri.query = URI.encode_www_form(query_params) unless query_params.empty?
+    uri
   end
 
   def handle_response(response)
@@ -97,6 +85,18 @@ class WeatherAPI
     else
       raise WeatherAPIError::UNKNOWN_ERROR
     end
+  end
+
+  def valid_city_input?(city)
+    return false unless city
+
+    !city.empty?
+  end
+
+  def valid_days_input?(days)
+    return false unless days
+
+    days.is_a?(Integer) && days.between?(2, 6)
   end
 
   def weather_metric_message(metric, value)
