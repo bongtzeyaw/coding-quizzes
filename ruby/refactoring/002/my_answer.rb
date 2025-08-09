@@ -38,9 +38,7 @@ class GameCharacter
   protected
 
   def receive_damage!(damage)
-    mitigated_damage = damage - @defense * DEFAULT_DEFENSE_MULTIPLIER if @defense.positive?
-    mitigated_damage = 0 if mitigated_damage.negative?
-
+    mitigated_damage = calculate_mitigated_damage(damage)
     @hp -= mitigated_damage
     mitigated_damage
   end
@@ -69,6 +67,10 @@ class GameCharacter
 
   def calculate_damage(attack_skill_detail)
     @attack * attack_skill_detail[:attack_multiplier]
+  end
+
+  def calculate_mitigated_damage(damage)
+    @defense.positive? ? [0, damage - @defense * DEFAULT_DEFENSE_MULTIPLIER].max : damage
   end
 end
 
