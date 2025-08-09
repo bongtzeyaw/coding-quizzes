@@ -17,11 +17,13 @@ class WeatherAPIError < StandardError
 end
 
 class WeatherAPI
+  BASE_PATH = "https://api.weather.example.com/v1/"
+
   def get_weather(city)
     with_error_handling do
       return nil unless valid_city_input?(city)
 
-      uri = URI("https://api.weather.example.com/v1/current?city=#{city}")
+      uri = build_uri('current', { city: })
       response = Net::HTTP.get_response(uri)
 
       case response.code
@@ -51,7 +53,7 @@ class WeatherAPI
     with_error_handling do
       return nil unless valid_city_input?(city) && valid_days_input?(days)
 
-      uri = URI("https://api.weather.example.com/v1/forecast?city=#{city}&days=#{days}")
+      uri = build_uri('forecast', { city:, days: })
       response = Net::HTTP.get_response(uri)
 
       case response.code
@@ -91,6 +93,12 @@ class WeatherAPI
     return false unless days
 
     days.is_a?(Integer) && days.between?(2, 6)
+  end
+
+  def build_uri(path, query_params = {})
+    uri = URI.join(BASE_PATH, path)
+    uri.query = URI.encode_www_form(query_params) unless query_params.empty?
+    uri
   end
 
   def with_error_handling
