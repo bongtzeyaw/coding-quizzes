@@ -25,6 +25,16 @@ class GameCharacter
     @defense += increments[:defense]
   end
 
+  protected
+
+  def receive_damage!(damage)
+    mitigated_damage = damage - @defense * DEFAULT_DEFENSE_MULTIPLIER if @defense.positive?
+    mitigated_damage = 0 if mitigated_damage.negative?
+
+    @hp -= mitigated_damage
+    mitigated_damage
+  end
+
   private
 
   def attack_skill_details
@@ -59,16 +69,6 @@ class GameCharacter
     else
       calculate_special_attack_damage(skill)
     end
-  end
-
-  protected
-
-  def receive_damage!(damage)
-    mitigated_damage = damage - @defense * DEFAULT_DEFENSE_MULTIPLIER if @defense.positive?
-    mitigated_damage = 0 if mitigated_damage.negative?
-
-    @hp -= mitigated_damage
-    mitigated_damage
   end
 end
 
