@@ -1,6 +1,10 @@
 # frozen_string_literal: true
 
 class GameCharacter
+  ATTACK_SKILLS_DETAIL = {
+    'normal' => { mp_cost: 0, attack_multiplier: 1 }
+  }.freeze
+
   DEFAULT_DEFENSE_MULTIPLIER = 0.5
 
   def initialize(hp:, mp:, attack:, defense:, skills:)
@@ -18,7 +22,7 @@ class GameCharacter
     return 0 unless sufficient_mp_for_skill?(attack_skill_detail)
 
     consume_mp!(attack_skill_detail)
-    damage = calculate_damage(skill)
+    damage = calculate_damage(attack_skill_detail)
     enemy.receive_damage!(damage)
   end
 
@@ -44,7 +48,7 @@ class GameCharacter
   private
 
   def attack_skill_details
-    self.class::ATTACK_SKILLS_DETAIL
+    ATTACK_SKILLS_DETAIL.merge(self.class::ATTACK_SKILLS_DETAIL)
   end
 
   def level_up_increments
@@ -63,20 +67,8 @@ class GameCharacter
     @mp -= attack_skill_detail[:mp_cost]
   end
 
-  def calculate_normal_attack_damage
-    @attack
-  end
-
-  def calculate_special_attack_damage(attack_skill_detail)
+  def calculate_damage(attack_skill_detail)
     @attack * attack_skill_detail[:attack_multiplier]
-  end
-
-  def calculate_damage(skill)
-    if skill == 'normal'
-      calculate_normal_attack_damage
-    else
-      calculate_special_attack_damage(skill)
-    end
   end
 end
 
