@@ -4,7 +4,7 @@ require 'json'
 class WeatherAPIError < StandardError
   private_class_method :new
 
-  attr_reader :message, :code
+  attr_reader :message
 
   def initialize(message, code = nil)
     @message = message
