@@ -37,18 +37,9 @@ class WeatherAPI
       return nil unless valid_city_input?(city)
 
       uri = build_uri('current', { city: })
-      response = Net::HTTP.get_response(uri)
 
-      case response.code
-      when '200'
-        weather_detail = JSON.parse(response.body)
+      handle_response(Net::HTTP.get_response(uri)) do |weather_detail|
         weather_message(city, weather_detail)
-      when '404'
-        raise WeatherAPIError::CITY_NOT_FOUND
-      when '500'
-        raise WeatherAPIError::SERVER_ERROR
-      else
-        raise WeatherAPIError::UNKNOWN_ERROR
       end
     end
   end
@@ -58,19 +49,10 @@ class WeatherAPI
       return nil unless valid_city_input?(city) && valid_days_input?(days)
 
       uri = build_uri('forecast', { city:, days: })
-      response = Net::HTTP.get_response(uri)
 
-      case response.code
-      when '200'
-        forecast_detail = JSON.parse(response.body)
+      handle_response(Net::HTTP.get_response(uri)) do |forecast_detail|
         forecast_multiple_days = forecast_detail['forecasts']
         forecast_message(city, days, forecast_multiple_days)
-      when '404'
-        raise WeatherAPIError::CITY_NOT_FOUND
-      when '500'
-        raise WeatherAPIError::SERVER_ERROR
-      else
-        raise WeatherAPIError::UNKNOWN_ERROR
       end
     end
   end
@@ -101,6 +83,20 @@ class WeatherAPI
     e.message
   rescue StandardError => e
     "Error: #{e.message}"
+  end
+
+  def handle_response(response)
+    case response.code
+    when '200'
+      parsed_body = JSON.parse(response.body)
+      yield(parsed_body)
+    when '404'
+      raise WeatherAPIError::CITY_NOT_FOUND
+    when '500'
+      raise WeatherAPIError::SERVER_ERROR
+    else
+      raise WeatherAPIError::UNKNOWN_ERROR
+    end
   end
 
   def weather_metric_message(metric, value)
