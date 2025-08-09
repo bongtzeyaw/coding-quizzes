@@ -38,9 +38,9 @@ class GameCharacter
   protected
 
   def receive_damage!(damage)
-    mitigated_damage = calculate_mitigated_damage(damage)
-    @hp -= mitigated_damage
-    mitigated_damage
+    final_damage = calculate_mitigated_damage(damage)
+    @hp = [0, @hp - final_damage].max
+    final_damage
   end
 
   private
