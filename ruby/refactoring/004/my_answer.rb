@@ -19,7 +19,7 @@ end
 class WeatherAPI
   def get_weather(city)
     with_error_handling do
-      return nil if [nil, ''].include?(city)
+      return nil unless valid_city_input?(city)
 
       uri = URI("https://api.weather.example.com/v1/current?city=#{city}")
       response = Net::HTTP.get_response(uri)
@@ -49,7 +49,7 @@ class WeatherAPI
 
   def get_forecast(city, days)
     with_error_handling do
-      return nil if city.nil? || city == '' || days.nil? || days < 1 || days > 7
+      return nil unless valid_city_input?(city) && valid_days_input?(days)
 
       uri = URI("https://api.weather.example.com/v1/forecast?city=#{city}&days=#{days}")
       response = Net::HTTP.get_response(uri)
@@ -80,6 +80,18 @@ class WeatherAPI
   end
 
   private
+
+  def valid_city_input?(city)
+    return false unless city
+
+    !city.empty?
+  end
+
+  def valid_days_input?(days)
+    return false unless days
+
+    days.is_a?(Integer) && days.between?(2, 6)
+  end
 
   def with_error_handling
     yield
