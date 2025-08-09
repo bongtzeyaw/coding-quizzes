@@ -17,7 +17,20 @@ class WeatherAPIError < StandardError
 end
 
 class WeatherAPI
-  BASE_PATH = "https://api.weather.example.com/v1/"
+  BASE_PATH = 'https://api.weather.example.com/v1/'
+
+  WEATHER_METRICS_UNIT = {
+    'temperature' => "\u00b0C",
+    'humidity' => '%',
+    'wind_speed' => 'km/h'
+  }
+
+  WEATHER_METRICS_DISPLAYED_LABEL = {
+    'temperature' => 'Temperature',
+    'description' => 'Description',
+    'humidity' => 'Humidity',
+    'wind_speed' => 'Wind'
+  }
 
   def get_weather(city)
     with_error_handling do
@@ -28,17 +41,8 @@ class WeatherAPI
 
       case response.code
       when '200'
-        data = JSON.parse(response.body)
-        temp = data['temperature']
-        desc = data['description']
-        hum = data['humidity']
-        wind = data['wind_speed']
-
-        result = "Weather in #{city}: "
-        result += "Temperature: #{temp}\u00b0C, "
-        result += "Description: #{desc}, "
-        result += "Humidity: #{hum}%, "
-        result + "Wind: #{wind}km/h"
+        weather_detail = JSON.parse(response.body)
+        weather_message(city, weather_detail)
       when '404'
         raise WeatherAPIError::CITY_NOT_FOUND
       when '500'
@@ -58,19 +62,9 @@ class WeatherAPI
 
       case response.code
       when '200'
-        data = JSON.parse(response.body)
-        forecasts = data['forecasts']
-
-        result = "#{days}-day forecast for #{city}:\n"
-        for i in 0..forecasts.length - 1
-          date = forecasts[i]['date']
-          temp = forecasts[i]['temperature']
-          desc = forecasts[i]['description']
-
-          result += "#{date}: #{temp}\u00b0C, #{desc}\n"
-        end
-
-        result
+        forecast_detail = JSON.parse(response.body)
+        forecast_multiple_days = forecast_detail['forecasts']
+        forecast_message(city, days, forecast_multiple_days)
       when '404'
         raise WeatherAPIError::CITY_NOT_FOUND
       when '500'
@@ -107,5 +101,31 @@ class WeatherAPI
     e.message
   rescue StandardError => e
     "Error: #{e.message}"
+  end
+
+  def weather_metric_message(metric, value)
+    if WEATHER_METRICS_UNIT[metric]
+      "#{WEATHER_METRICS_DISPLAYED_LABEL[metric]}: #{value}#{WEATHER_METRICS_UNIT[metric]}"
+    else
+      "#{WEATHER_METRICS_DISPLAYED_LABEL[metric]}: #{value}"
+    end
+  end
+
+  def weather_message(city, weather_detail)
+    "Weather in #{city}: ".concat(
+      weather_detail.map { |metric, value| weather_metric_message(metric, value) }.join(", ")
+    )
+  end
+
+  def forecast_single_day_message(forecast_single_day)
+    "#{forecast_single_day['date']}: #{forecast_single_day['temperature']}#{WEATHER_METRICS_UNIT['temperature']}, #{forecast_single_day['description']}\n"
+  end
+
+  def forecast_message(city, days, forecast_multiple_days)
+    "#{days}-day forecast for #{city}:\n".concat(
+      forecast_multiple_days.map do |forecast_single_day|
+        forecast_single_day_message(forecast_single_day)
+      end.join
+    )
   end
 end
