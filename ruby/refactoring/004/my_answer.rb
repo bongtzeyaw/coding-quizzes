@@ -100,10 +100,13 @@ class WeatherAPI
   end
 
   def weather_metric_message(metric, value)
-    if WEATHER_METRICS_UNIT[metric]
-      "#{WEATHER_METRICS_DISPLAYED_LABEL[metric]}: #{value}#{WEATHER_METRICS_UNIT[metric]}"
+    metric_label = WEATHER_METRICS_DISPLAYED_LABEL[metric]
+    metric_unit = WEATHER_METRICS_UNIT[metric]
+
+    if metric_unit
+      "#{metric_label}: #{value}#{metric_unit}"
     else
-      "#{WEATHER_METRICS_DISPLAYED_LABEL[metric]}: #{value}"
+      "#{metric_label}: #{value}"
     end
   end
 
@@ -114,7 +117,12 @@ class WeatherAPI
   end
 
   def forecast_single_day_message(forecast_single_day)
-    "#{forecast_single_day['date']}: #{forecast_single_day['temperature']}#{WEATHER_METRICS_UNIT['temperature']}, #{forecast_single_day['description']}\n"
+    date = forecast_single_day['date']
+    temperature_value = forecast_single_day['temperature']
+    temperature_unit = WEATHER_METRICS_UNIT['temperature']
+    description = forecast_single_day['description']
+
+    "#{date}: #{temperature_value}#{temperature_unit}, #{description}\n"
   end
 
   def forecast_message(city, days, forecast_multiple_days)
