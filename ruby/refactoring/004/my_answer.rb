@@ -119,9 +119,7 @@ class WeatherAPI
 
   def forecast_message(city, days, forecast_multiple_days)
     "#{days}-day forecast for #{city}:\n".concat(
-      forecast_multiple_days.map do |forecast_single_day|
-        forecast_single_day_message(forecast_single_day)
-      end.join
+      forecast_multiple_days.map { |forecast_single_day| forecast_single_day_message(forecast_single_day) }.join
     )
   end
 end
