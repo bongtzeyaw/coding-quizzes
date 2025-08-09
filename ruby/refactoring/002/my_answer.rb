@@ -12,6 +12,8 @@ class GameCharacter
   end
 
   def attack_enemy(enemy, skill)
+    return 0 unless valid_attack_skill?(skill)
+
     attack_skill_detail = attack_skill_details[skill]
     return 0 unless sufficient_mp_for_skill?(attack_skill_detail)
 
@@ -47,6 +49,10 @@ class GameCharacter
 
   def level_up_increments
     self.class::LEVEL_UP_STATS_INCREMENTS
+  end
+
+  def valid_attack_skill?(skill)
+    attack_skill_details.key?(skill)
   end
 
   def sufficient_mp_for_skill?(attack_skill_detail)
