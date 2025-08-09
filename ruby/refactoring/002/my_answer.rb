@@ -12,6 +12,10 @@ class GameCharacter
   end
 
   def attack_enemy(enemy, skill)
+    attack_skill_detail = attack_skill_details[skill]
+    return 0 unless sufficient_mp_for_skill?(attack_skill_detail)
+
+    consume_mp!(attack_skill_detail)
     damage = calculate_damage(skill)
     enemy.receive_damage!(damage)
   end
@@ -45,21 +49,19 @@ class GameCharacter
     self.class::LEVEL_UP_STATS_INCREMENTS
   end
 
-  def consume_mp!(mp_cost)
-    return false if @mp < mp_cost
+  def sufficient_mp_for_skill?(attack_skill_detail)
+    @mp >= attack_skill_detail[:mp_cost]
+  end
 
-    @mp -= mp_cost
-    true
+  def consume_mp!(attack_skill_detail)
+    @mp -= attack_skill_detail[:mp_cost]
   end
 
   def calculate_normal_attack_damage
     @attack
   end
 
-  def calculate_special_attack_damage(skill)
-    attack_skill_detail = attack_skill_details[skill]
-    return 0 unless attack_skill_detail && consume_mp!(attack_skill_detail[:mp_cost])
-
+  def calculate_special_attack_damage(attack_skill_detail)
     @attack * attack_skill_detail[:attack_multiplier]
   end
 
