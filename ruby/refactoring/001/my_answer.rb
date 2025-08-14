@@ -56,6 +56,8 @@ class ReservationSystem
     final_price = apply_rate(room_detail.base_price, date, user)
 
     "#{room_name} reserved for #{date}. Price: #{format('%.2f', final_price)}"
+  rescue ArgumentError
+    'error'
   end
 
   private

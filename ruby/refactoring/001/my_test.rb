@@ -1,5 +1,5 @@
 require 'minitest/autorun'
-require_relative 'my_answer'
+require_relative 'quiz'
 
 class TestReservationSystem < Minitest::Test
   def setup
@@ -8,6 +8,10 @@ class TestReservationSystem < Minitest::Test
 
   def test_nil_user
     assert_equal 'error', @reservation_system.check_reservation(nil, 1, '2024-01-01')
+  end
+
+  def test_invalid_room_type
+    assert_equal 'error', @reservation_system.check_reservation('A123', 4, '2024-01-01')
   end
 
   def test_invalid_year
