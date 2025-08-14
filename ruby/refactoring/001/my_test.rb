@@ -1,5 +1,5 @@
 require 'minitest/autorun'
-require_relative 'quiz'
+require_relative 'my_answer'
 
 class TestReservationSystem < Minitest::Test
   def setup
