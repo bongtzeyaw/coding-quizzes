@@ -78,10 +78,8 @@ class WeatherAPI
     with_error_handling do
       return nil unless valid_city_input?(city)
 
-      uri = build_uri('current', { city: })
-
-      handle_response(Net::HTTP.get_response(uri)) do |weather_detail|
-        WeatherMessageGenerator.new(city).generate_weather_message(weather_detail)
+      handle_response(make_request('current', { city: })) do |weather_detail|
+        generate_weather_message(city, weather_detail)
       end
     end
   end
@@ -90,10 +88,8 @@ class WeatherAPI
     with_error_handling do
       return nil unless valid_city_input?(city) && valid_days_input?(days)
 
-      uri = build_uri('forecast', { city:, days: })
-
-      handle_response(Net::HTTP.get_response(uri)) do |forecast_detail|
-        WeatherMessageGenerator.new(city).generate_forecast_message(days, forecast_detail)
+      handle_response(make_request('forecast', { city:, days: })) do |forecast_detail|
+        generate_forecast_message(city, days, forecast_detail)
       end
     end
   end
@@ -108,16 +104,14 @@ class WeatherAPI
     "Error: #{e.message}"
   end
 
-  def build_uri(path, query_params = {})
-    uri = URI.join(BASE_PATH, path)
-    uri.query = URI.encode_www_form(query_params) unless query_params.empty?
-    uri
+  def parse_response(response)
+    JSON.parse(response.body)
   end
 
   def handle_response(response)
     case response.code
     when '200'
-      parsed_body = JSON.parse(response.body)
+      parsed_body = parse_response(response)
       yield(parsed_body)
     when '404'
       raise WeatherAPIError::CITY_NOT_FOUND
@@ -126,6 +120,21 @@ class WeatherAPI
     else
       raise WeatherAPIError::UNKNOWN_ERROR
     end
+  end
+
+  def build_uri(endpoint, params = {})
+    uri = URI.join(BASE_PATH, endpoint)
+    uri.query = URI.encode_www_form(params) unless params.empty?
+    uri
+  end
+
+  def fetch_response(uri)
+    Net::HTTP.get_response(uri)
+  end
+
+  def make_request(endpoint, params = {})
+    uri = build_uri(endpoint, params)
+    fetch_response(uri)
   end
 
   def valid_city_input?(city)
@@ -138,5 +147,13 @@ class WeatherAPI
     return false unless days
 
     days.is_a?(Integer) && days.between?(2, 6)
+  end
+
+  def generate_weather_message(city, weather_detail)
+    WeatherMessageGenerator.new(city).generate_weather_message(weather_detail)
+  end
+
+  def generate_forecast_message(city, days, forecast_detail)
+    WeatherMessageGenerator.new(city).generate_forecast_message(days, forecast_detail)
   end
 end
