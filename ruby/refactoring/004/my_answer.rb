@@ -16,9 +16,7 @@ class WeatherAPIError < StandardError
   UNKNOWN_ERROR  = new('Unknown error')
 end
 
-class WeatherAPI
-  BASE_PATH = 'https://api.weather.example.com/v1/'
-
+class WeatherMessageGenerator
   WEATHER_METRICS_UNIT = {
     'temperature' => "\u00b0C",
     'humidity'    => '%',
@@ -32,6 +30,50 @@ class WeatherAPI
     'wind_speed'  => 'Wind'
   }
 
+  def initialize(city)
+    @city = city
+  end
+
+  def generate_weather_message(weather_detail)
+    "Weather in #{@city}: ".concat(
+      weather_detail.map { |metric, value| generate_weather_metric_message(metric, value) }.join(", ")
+    )
+  end
+
+  def generate_forecast_message(days, forecast_detail)
+    forecast_multiple_days = forecast_detail['forecasts']
+
+    "#{days}-day forecast for #{@city}:\n".concat(
+      forecast_multiple_days.map { |forecast_single_day| generate_forecast_single_day_message(forecast_single_day) }.join
+    )
+  end
+
+  private
+
+  def generate_weather_metric_message(metric, value)
+    metric_label = WEATHER_METRICS_DISPLAYED_LABEL[metric]
+    metric_unit = WEATHER_METRICS_UNIT[metric]
+
+    if metric_unit
+      "#{metric_label}: #{value}#{metric_unit}"
+    else
+      "#{metric_label}: #{value}"
+    end
+  end
+
+  def generate_forecast_single_day_message(forecast_single_day)
+    date = forecast_single_day['date']
+    temperature_value = forecast_single_day['temperature']
+    temperature_unit = WEATHER_METRICS_UNIT['temperature']
+    description = forecast_single_day['description']
+
+    "#{date}: #{temperature_value}#{temperature_unit}, #{description}\n"
+  end
+end
+
+class WeatherAPI
+  BASE_PATH = 'https://api.weather.example.com/v1/'
+
   def get_weather(city)
     with_error_handling do
       return nil unless valid_city_input?(city)
@@ -39,7 +81,7 @@ class WeatherAPI
       uri = build_uri('current', { city: })
 
       handle_response(Net::HTTP.get_response(uri)) do |weather_detail|
-        weather_message(city, weather_detail)
+        WeatherMessageGenerator.new(city).generate_weather_message(weather_detail)
       end
     end
   end
@@ -51,8 +93,7 @@ class WeatherAPI
       uri = build_uri('forecast', { city:, days: })
 
       handle_response(Net::HTTP.get_response(uri)) do |forecast_detail|
-        forecast_multiple_days = forecast_detail['forecasts']
-        forecast_message(city, days, forecast_multiple_days)
+        WeatherMessageGenerator.new(city).generate_forecast_message(days, forecast_detail)
       end
     end
   end
@@ -97,37 +138,5 @@ class WeatherAPI
     return false unless days
 
     days.is_a?(Integer) && days.between?(2, 6)
-  end
-
-  def weather_metric_message(metric, value)
-    metric_label = WEATHER_METRICS_DISPLAYED_LABEL[metric]
-    metric_unit = WEATHER_METRICS_UNIT[metric]
-
-    if metric_unit
-      "#{metric_label}: #{value}#{metric_unit}"
-    else
-      "#{metric_label}: #{value}"
-    end
-  end
-
-  def weather_message(city, weather_detail)
-    "Weather in #{city}: ".concat(
-      weather_detail.map { |metric, value| weather_metric_message(metric, value) }.join(", ")
-    )
-  end
-
-  def forecast_single_day_message(forecast_single_day)
-    date = forecast_single_day['date']
-    temperature_value = forecast_single_day['temperature']
-    temperature_unit = WEATHER_METRICS_UNIT['temperature']
-    description = forecast_single_day['description']
-
-    "#{date}: #{temperature_value}#{temperature_unit}, #{description}\n"
-  end
-
-  def forecast_message(city, days, forecast_multiple_days)
-    "#{days}-day forecast for #{city}:\n".concat(
-      forecast_multiple_days.map { |forecast_single_day| forecast_single_day_message(forecast_single_day) }.join
-    )
   end
 end
