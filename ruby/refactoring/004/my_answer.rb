@@ -1,21 +1,6 @@
 require 'net/http'
 require 'json'
 
-class WeatherAPIError < StandardError
-  private_class_method :new
-
-  attr_reader :message
-
-  def initialize(message, code = nil)
-    @message = message
-    @code = code
-  end
-
-  CITY_NOT_FOUND = new('City not found', '404')
-  SERVER_ERROR   = new('Server error', '500')
-  UNKNOWN_ERROR  = new('Unknown error')
-end
-
 class WeatherMessageGenerator
   WEATHER_METRICS_UNIT = {
     'temperature' => "\u00b0C",
@@ -69,6 +54,21 @@ class WeatherMessageGenerator
 
     "#{date}: #{temperature_value}#{temperature_unit}, #{description}\n"
   end
+end
+
+class WeatherAPIError < StandardError
+  private_class_method :new
+
+  attr_reader :message
+
+  def initialize(message, code = nil)
+    @message = message
+    @code = code
+  end
+
+  CITY_NOT_FOUND = new('City not found', '404')
+  SERVER_ERROR   = new('Server error', '500')
+  UNKNOWN_ERROR  = new('Unknown error')
 end
 
 class WeatherAPI
