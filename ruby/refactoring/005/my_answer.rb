@@ -86,21 +86,15 @@ end
 
 class EmailNotifier
   def send_email(type, user)
-    with_error_handling do
-      email = EmailTemplate.new(type, user).generate
-      log_successful_email_delivery(email)
-      true
-    end
-  end
-
-  private
-
-  def with_error_handling
-    yield
+    email = EmailTemplate.new(type, user).generate
+    log_successful_email_delivery(email)
+    true
   rescue ArgumentError
     log_failed_email_delivery
     false
   end
+
+  private
 
   def log_successful_email_delivery(email)
     puts "Sending email: #{email}"
