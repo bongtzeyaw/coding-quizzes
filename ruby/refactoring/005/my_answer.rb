@@ -3,7 +3,6 @@
 class EmailTemplate
   EMAIL_TEMPLATE_DETAILS = {
     'welcome' => {
-      required_user_attributes: %i[name],
       template: {
         subject: 'Welcome to Our Service!',
         body: "Hello %<user_name>s,\n\nThank you for joining us!",
@@ -12,7 +11,6 @@ class EmailTemplate
       }
     },
     'password_reset' => {
-      required_user_attributes: %i[name],
       template: {
         subject: 'Password Reset Request',
         body: "Hello %<user_name>s,\n\nClick here to reset your password.",
@@ -21,7 +19,6 @@ class EmailTemplate
       }
     },
     'order_confirmation' => {
-      required_user_attributes: %i[name order_id],
       template: {
         subject: 'Order Confirmation #%<user_order_id>s',
         body: "Hello %<user_name>s,\n\nYour order has been confirmed.",
@@ -30,7 +27,6 @@ class EmailTemplate
       }
     },
     'newsletter' => {
-      required_user_attributes: %i[name],
       template: {
         subject: 'Monthly Newsletter',
         body: "Hello %<user_name>s,\n\nHere\'s our monthly update.",
@@ -42,7 +38,6 @@ class EmailTemplate
 
   def initialize(type, user)
     raise ArgumentError, 'Invalid email template type' unless valid_type?(type)
-    raise ArgumentError, 'Required user attribute(s) not present' unless required_user_attributes_present?(type, user)
 
     @email_template_detail = EMAIL_TEMPLATE_DETAILS[type][:template]
     @user = user
@@ -63,12 +58,6 @@ class EmailTemplate
 
   def valid_type?(type)
     EMAIL_TEMPLATE_DETAILS.key?(type)
-  end
-
-  def required_user_attributes_present?(type, user)
-    EMAIL_TEMPLATE_DETAILS[type][:required_user_attributes].all? do |required_user_attribute|
-      user.key?(required_user_attribute)
-    end
   end
 
   def interpolate_email_template_detail_subject
