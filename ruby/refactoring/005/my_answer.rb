@@ -99,15 +99,15 @@ class EmailTemplateRegistry
   def template(name, &block)
     email_template_generator_config = EmailTemplateGeneratorConfig.new
     email_template_generator_config.instance_eval(&block)
-    @email_template_generator_configs[name] =  email_template_generator_config.config
+    @email_template_generator_configs[name] = email_template_generator_config.config
   end
 end
 
 class EmailTemplate
-  CONFIGS = TemplateRegistry.new.email_template_generator_configs
-  private_constant :CONFIGS
+  EMAIL_TEMPLATE_GENERATOR_CONFIGS = EmailTemplateRegistry.new.email_template_generator_configs
+  private_constant :EMAIL_TEMPLATE_GENERATOR_CONFIGS
 
-  def initialize(type, user)
+  def initialize(type:, user:)
     raise ArgumentError, 'Invalid email template type' unless valid_type?(type.to_sym)
 
     @type = type.to_sym
@@ -115,19 +115,19 @@ class EmailTemplate
   end
 
   def generate
-    EmailTemplateGenerator.new(@user, CONFIGS[@type]).generate
+    EmailTemplateGenerator.new(@user, EMAIL_TEMPLATE_GENERATOR_CONFIGS[@type]).generate
   end
 
   private
 
   def valid_type?(type)
-    CONFIGS.key?(type)
+    EMAIL_TEMPLATE_GENERATOR_CONFIGS.key?(type)
   end
 end
 
 class EmailNotifier
   def send_email(type, user)
-    email = EmailTemplate.new(type, user).generate
+    email = EmailTemplate.new(type:, user:).generate
     log_successful_email_delivery(email)
     true
   rescue ArgumentError
