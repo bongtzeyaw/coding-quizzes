@@ -56,19 +56,12 @@ class EmailTemplateGenerator
   end
 end
 
-class EmailTemplate
-  def initialize(type, user)
+class EmailTemplateRegistry
+  attr_reader :email_template_generator_configs
+
+  def initialize
     @email_template_generator_configs = {}
     define_templates
-
-    raise ArgumentError, 'Invalid email template type' unless valid_type?(type.to_sym)
-
-    @type = type.to_sym
-    @user = user
-  end
-
-  def generate
-    EmailTemplateGenerator.new(@user, @email_template_generator_configs[@type]).generate
   end
 
   private
@@ -103,14 +96,32 @@ class EmailTemplate
     end
   end
 
-  def valid_type?(type)
-    @email_template_generator_configs.key?(type)
-  end
-
   def template(name, &block)
     email_template_generator_config = EmailTemplateGeneratorConfig.new
     email_template_generator_config.instance_eval(&block)
-    @email_template_generator_configs[name] = email_template_generator_config.config
+    @email_template_generator_configs[name] =  email_template_generator_config.config
+  end
+end
+
+class EmailTemplate
+  CONFIGS = TemplateRegistry.new.email_template_generator_configs
+  private_constant :CONFIGS
+
+  def initialize(type, user)
+    raise ArgumentError, 'Invalid email template type' unless valid_type?(type.to_sym)
+
+    @type = type.to_sym
+    @user = user
+  end
+
+  def generate
+    EmailTemplateGenerator.new(@user, CONFIGS[@type]).generate
+  end
+
+  private
+
+  def valid_type?(type)
+    CONFIGS.key?(type)
   end
 end
 
