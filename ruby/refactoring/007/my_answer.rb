@@ -80,19 +80,66 @@ class ItemCollection
   end
 end
 
-class ShoppingCart
+class CheckoutTotalCalculator
+  attr_writer :is_member, :coupon
+
+  MEMBER_DISCOUNT_RATE = 0.05
   DEFAULT_TAX_RATE = 0.08
   DEFAULT_SHIPPING_FEE = 500
   FREE_SHIPPING_THRESHOLD = 3000
-  MEMBER_DISCOUNT_RATE = 0.05
 
+  def initialize(is_member:, coupon:)
+    @is_member = is_member
+    @coupon = coupon
+  end
+
+  def calculate(items_collection:)
+    return 0 if items_collection.items.empty?
+
+    subtotal = calculate_subtotal(items_collection)
+    subtotal * discount_multiplier * tax_multiplier + shipping_fee(subtotal)
+  end
+
+  private
+
+  def calculate_subtotal(items_collection)
+    items_collection.calculate_subtotal
+  end
+
+  def discount_multiplier
+    coupon_discount_rate = @coupon ? @coupon.discount_rate : 0
+
+    member_discount_rate =
+      case @is_member
+      when true
+        MEMBER_DISCOUNT_RATE
+      when false
+        -MEMBER_DISCOUNT_RATE
+      else
+        0
+      end
+
+    1 - (coupon_discount_rate + member_discount_rate)
+  end
+
+  def tax_multiplier
+    1 + DEFAULT_TAX_RATE
+  end
+
+  def shipping_fee(subtotal)
+    return 0 if @coupon&.free_shipping
+
+    subtotal >= FREE_SHIPPING_THRESHOLD ? 0 : DEFAULT_SHIPPING_FEE
+  end
+end
+
+class ShoppingCart
   def initialize
     @items_collection = ItemCollection.new([])
-    @discount = 0
-    @tax_rate = DEFAULT_TAX_RATE
-    @shipping_fee = 0
-    @is_member = false
-    @coupon_code = nil
+    @checkout_total_calculator = CheckoutTotalCalculator.new(
+      is_member: nil,
+      coupon: nil
+    )
   end
 
   def add_item(item)
@@ -114,42 +161,16 @@ class ShoppingCart
 
     return false unless coupon
 
-    @discount = coupon.discount_rate
-    @shipping_fee = coupon.free_shipping? ? 0 : DEFAULT_SHIPPING_FEE
+    @checkout_total_calculator.coupon = coupon
     true
   end
 
   def set_member(is_member)
-    @is_member = is_member
-    @discount = if @is_member
-                  @discount + MEMBER_DISCOUNT_RATE
-                else
-                  @discount - MEMBER_DISCOUNT_RATE
-                end
-    calculate_total
+    @checkout_total_calculator.is_member = is_member
   end
 
   def calculate_total
-    subtotal = 0
-    items = get_items
-    for i in 0..items.length - 1
-      subtotal += (items[i][:price] * items[i][:quantity])
-    end
-
-    discount_amount = subtotal * @discount
-    after_discount = subtotal - discount_amount
-
-    tax = after_discount * @tax_rate
-
-    if @coupon_code != 'FREESHIP'
-      @shipping_fee = if subtotal < FREE_SHIPPING_THRESHOLD
-                        DEFAULT_SHIPPING_FEE
-                      else
-                        0
-                      end
-    end
-
-    after_discount + tax + @shipping_fee
+    @checkout_total_calculator.calculate(items_collection: @items_collection)
   end
 
   def get_total
