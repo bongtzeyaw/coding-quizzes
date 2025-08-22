@@ -78,50 +78,72 @@ end
 
 class PaymentProcessor
   def process_credit_card(amount, card_number, cvv)
-    puts "[#{Time.now}] Starting credit card payment processing"
-    puts "[#{Time.now}] Amount: #{amount}"
+    operation_title = 'credit card payment'
+    operation_action_name = 'payment'
 
-    credit_card_validator = CreditCardValidator.new
-    credit_card_validation_result = credit_card_validator.validate(card_number:, cvv:, amount:)
+    with_logging_for_validation_phase(operation_title:, amount:) do
+      credit_card_validator = CreditCardValidator.new
+      credit_card_validation_result = credit_card_validator.validate(card_number:, cvv:, amount:)
 
-    unless credit_card_validation_result.success?
-      puts "[#{Time.now}] ERROR: #{credit_card_validation_result.info}"
-      return credit_card_validation_result.to_h
+      unless credit_card_validation_result.success?
+        log_validation_error(credit_card_validation_result)
+        return credit_card_validation_result.to_h
+      end
     end
 
-    puts "[#{Time.now}] Validation passed"
-
     transaction_id = "TXN#{Time.now.to_i}"
-    puts "[#{Time.now}] Processing payment..."
-    sleep(0.5)
 
-    puts "[#{Time.now}] Payment processed successfully"
-    puts "[#{Time.now}] Transaction ID: #{transaction_id}"
+    with_logging_for_processing_phase(operation_action_name:, transaction_id:) do
+      sleep(0.5)
+    end
 
-    { success: true, transaction_id: transaction_id }
+    OperationResult.new(success: true, transaction_id:).to_h
   end
 
   def process_bank_transfer(amount, account_number, routing_number)
-    puts "[#{Time.now}] Starting bank transfer processing"
-    puts "[#{Time.now}] Amount: #{amount}"
+    operation_title = 'bank transfer'
+    operation_action_name = 'transfer'
 
-    bank_transfer_validator = BankTransferValidator.new
-    bank_transfer_validation_result = bank_transfer_validator.validate(account_number:, routing_number:, amount:)
+    with_logging_for_validation_phase(operation_title:, amount:) do
+      bank_transfer_validator = BankTransferValidator.new
+      bank_transfer_validation_result = bank_transfer_validator.validate(account_number:, routing_number:, amount:)
 
-    unless bank_transfer_validation_result.success?
-      puts "[#{Time.now}] ERROR: #{bank_transfer_validation_result.info}"
-      return bank_transfer_validation_result.to_h
+      unless bank_transfer_validation_result.success?
+        log_validation_error(bank_transfer_validation_result)
+        return bank_transfer_validation_result.to_h
+      end
     end
 
-    puts "[#{Time.now}] Validation passed"
-
     transaction_id = "BNK#{Time.now.to_i}"
-    puts "[#{Time.now}] Processing transfer..."
-    sleep(1.0)
 
-    puts "[#{Time.now}] Transfer processed successfully"
+    with_logging_for_processing_phase(operation_action_name:, transaction_id:) do
+      sleep(1.0)
+    end
+
+    OperationResult.new(success: true, transaction_id:).to_h
+  end
+
+  private
+
+  def log_validation_error(validation_result)
+    puts "[#{Time.now}] ERROR: #{validation_result.info}"
+  end
+
+  def with_logging_for_validation_phase(operation_title:, amount:)
+    puts "[#{Time.now}] Starting #{operation_title} processing"
+    puts "[#{Time.now}] Amount: #{amount}"
+
+    yield
+
+    puts "[#{Time.now}] Validation passed"
+  end
+
+  def with_logging_for_processing_phase(operation_action_name:, transaction_id:)
+    puts "[#{Time.now}] Processing #{operation_action_name}..."
+
+    yield
+
+    puts "[#{Time.now}] #{operation_action_name.capitalize} processed successfully"
     puts "[#{Time.now}] Transaction ID: #{transaction_id}"
-
-    { success: true, transaction_id: transaction_id }
   end
 end
