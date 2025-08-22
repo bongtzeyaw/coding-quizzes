@@ -1,9 +1,14 @@
 class ShoppingCart
+  DEFAULT_TAX_RATE = 0.08
+  DEFAULT_SHIPPING_FEE = 500
+  FREE_SHIPPING_THRESHOLD = 3000
+  MEMBER_DISCOUNT_RATE = 0.05
+
   def initialize
     @items = []
     @total = 0
     @discount = 0
-    @tax_rate = 0.08
+    @tax_rate = DEFAULT_TAX_RATE
     @shipping_fee = 0
     @is_member = false
     @coupon_code = nil
@@ -58,9 +63,9 @@ class ShoppingCart
   def set_member(is_member)
     @is_member = is_member
     @discount = if @is_member
-                  @discount + 0.05
+                  @discount + MEMBER_DISCOUNT_RATE
                 else
-                  @discount - 0.05
+                  @discount - MEMBER_DISCOUNT_RATE
                 end
     calculate_total
   end
@@ -77,8 +82,8 @@ class ShoppingCart
     tax = after_discount * @tax_rate
 
     if @coupon_code != 'FREESHIP'
-      @shipping_fee = if subtotal < 3000
-                        500
+      @shipping_fee = if subtotal < FREE_SHIPPING_THRESHOLD
+                        DEFAULT_SHIPPING_FEE
                       else
                         0
                       end
