@@ -8,10 +8,6 @@ class Coupon
     @discount_rate = discount_rate
     @free_shipping = free_shipping
   end
-
-  def free_shipping?
-    @free_shipping
-  end
 end
 
 class CouponRegistry
