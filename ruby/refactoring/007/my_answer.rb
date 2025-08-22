@@ -1,3 +1,43 @@
+# frozen_string_literal: true
+
+class Coupon
+  attr_reader :discount_rate, :free_shipping
+
+  def initialize(code:, discount_rate:, free_shipping:)
+    @code = code
+    @discount_rate = discount_rate
+    @free_shipping = free_shipping
+  end
+
+  def free_shipping?
+    @free_shipping
+  end
+end
+
+class CouponRegistry
+  COUPONS = {
+    'SAVE10' => Coupon.new(
+      code: 'SAVE10',
+      discount_rate: 0.1,
+      free_shipping: false
+    ),
+    'SAVE20' => Coupon.new(
+      code: 'SAVE20',
+      discount_rate: 0.2,
+      free_shipping: false
+    ),
+    'FREESHIP' => Coupon.new(
+      code: 'FREESHIP',
+      discount_rate: 0,
+      free_shipping: true
+    )
+  }.freeze
+
+  def self.find_by(code:)
+    COUPONS[code]
+  end
+end
+
 class ItemCollection
   attr_reader :items
 
@@ -70,18 +110,12 @@ class ShoppingCart
   end
 
   def apply_coupon(code)
-    if code == 'SAVE10'
-      @coupon_code = code
-      @discount = 0.1
-    elsif code == 'SAVE20'
-      @coupon_code = code
-      @discount = 0.2
-    elsif code == 'FREESHIP'
-      @coupon_code = code
-      @shipping_fee = 0
-    else
-      return false
-    end
+    coupon = CouponRegistry.find_by(code:)
+
+    return false unless coupon
+
+    @discount = coupon.discount_rate
+    @shipping_fee = coupon.free_shipping? ? 0 : DEFAULT_SHIPPING_FEE
     true
   end
 
