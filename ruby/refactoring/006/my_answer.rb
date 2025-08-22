@@ -38,7 +38,7 @@ class CreditCardValidator < PaymentValidator
     return OperationResult.new(success: false, error: 'Invalid CVV') unless valid_cvv?(cvv)
     return OperationResult.new(success: false, error: 'Invalid amount') unless valid_amount?(amount)
 
-    OperationResult.new(success: true, message: 'Validation passed')
+    OperationResult.new(success: true)
   end
 
   private
@@ -62,7 +62,7 @@ class BankTransferValidator < PaymentValidator
     return OperationResult.new(success: false, error: 'Invalid routing number') unless valid_routing_number?(routing_number)
     return OperationResult.new(success: false, error: 'Invalid amount') unless valid_amount?(amount)
 
-    OperationResult.new(success: true, message: 'Validation passed')
+    OperationResult.new(success: true)
   end
 
   private
