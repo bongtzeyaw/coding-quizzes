@@ -6,7 +6,6 @@ class ShoppingCart
 
   def initialize
     @items = []
-    @total = 0
     @discount = 0
     @tax_rate = DEFAULT_TAX_RATE
     @shipping_fee = 0
@@ -27,8 +26,6 @@ class ShoppingCart
     end
 
     @items << item unless found
-
-    calculate_total
     true
   end
 
@@ -37,7 +34,6 @@ class ShoppingCart
       next unless @items[i][:id] == item_id
 
       @items.delete_at(i)
-      calculate_total
       return true
     end
     false
@@ -56,7 +52,6 @@ class ShoppingCart
     else
       return false
     end
-    calculate_total
     true
   end
 
@@ -89,11 +84,11 @@ class ShoppingCart
                       end
     end
 
-    @total = after_discount + tax + @shipping_fee
+    after_discount + tax + @shipping_fee
   end
 
   def get_total
-    @total
+    calculate_total
   end
 
   def get_items
