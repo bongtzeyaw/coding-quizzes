@@ -1,3 +1,45 @@
+class ItemCollection
+  attr_reader :items
+
+  def initialize(items)
+    @items = items
+  end
+
+  def can_add_item?(item)
+    item[:quantity].positive?
+  end
+
+  def add_item!(item)
+    existing_item = find(item[:id])
+
+    if existing_item
+      existing_item[:quantity] += item[:quantity]
+    else
+      @items << item
+    end
+
+    @items
+  end
+
+  def can_remove_item?(item_id)
+    !find(item_id).nil?
+  end
+
+  def remove_item!(item_id)
+    @items.reject! { |item| item[:id] == item_id }
+  end
+
+  def calculate_subtotal
+    @items.sum { |item| item[:price] * item[:quantity] }
+  end
+
+  private
+
+  def find(item_id)
+    @items.find { |item| item[:id] == item_id }
+  end
+end
+
 class ShoppingCart
   DEFAULT_TAX_RATE = 0.08
   DEFAULT_SHIPPING_FEE = 500
@@ -5,7 +47,7 @@ class ShoppingCart
   MEMBER_DISCOUNT_RATE = 0.05
 
   def initialize
-    @items = []
+    @items_collection = ItemCollection.new([])
     @discount = 0
     @tax_rate = DEFAULT_TAX_RATE
     @shipping_fee = 0
@@ -14,29 +56,17 @@ class ShoppingCart
   end
 
   def add_item(item)
-    return false if item[:quantity] <= 0
+    return false unless @items_collection.can_add_item?(item)
 
-    found = false
-    for i in 0..@items.length - 1
-      next unless @items[i][:id] == item[:id]
-
-      @items[i][:quantity] = @items[i][:quantity] + item[:quantity]
-      found = true
-      break
-    end
-
-    @items << item unless found
+    @items_collection.add_item!(item)
     true
   end
 
   def remove_item(item_id)
-    for i in 0..@items.length - 1
-      next unless @items[i][:id] == item_id
+    return false unless @items_collection.can_remove_item?(item_id)
 
-      @items.delete_at(i)
-      return true
-    end
-    false
+    @items_collection.remove_item!(item_id)
+    true
   end
 
   def apply_coupon(code)
@@ -67,8 +97,9 @@ class ShoppingCart
 
   def calculate_total
     subtotal = 0
-    for i in 0..@items.length - 1
-      subtotal += (@items[i][:price] * @items[i][:quantity])
+    items = get_items
+    for i in 0..items.length - 1
+      subtotal += (items[i][:price] * items[i][:quantity])
     end
 
     discount_amount = subtotal * @discount
@@ -92,6 +123,6 @@ class ShoppingCart
   end
 
   def get_items
-    @items
+    @items_collection.items
   end
 end
