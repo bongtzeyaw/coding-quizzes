@@ -19,13 +19,24 @@ class OperationResult
   end
 end
 
-class CreditCardValidator
+class PaymentValidator
+  AMOUNT_MIN = 0
+
+  protected
+
+  def valid_amount?(amount)
+    amount > AMOUNT_MIN
+  end
+end
+
+class CreditCardValidator < PaymentValidator
   CARD_NUMBER_LENGTH = 16
   CVV_LENGTH = 3
 
-  def validate(card_number:, cvv:)
+  def validate(card_number:, cvv:, amount:)
     return OperationResult.new(success: false, error: 'Invalid card number') unless valid_card_number?(card_number)
     return OperationResult.new(success: false, error: 'Invalid CVV') unless valid_cvv?(cvv)
+    return OperationResult.new(success: false, error: 'Invalid amount') unless valid_amount?(amount)
 
     OperationResult.new(success: true, message: 'Validation passed')
   end
@@ -41,14 +52,15 @@ class CreditCardValidator
   end
 end
 
-class BankTransferValidator
+class BankTransferValidator < PaymentValidator
   ROUTING_NUMBER_LENGTH = 9
   ACCOUNT_NUMBER_MIN_LENGTH = 8
   ACCOUNT_NUMBER_MAX_LENGTH = 12
 
-  def validate(account_number:, routing_number:)
+  def validate(account_number:, routing_number:, amount:)
     return OperationResult.new(success: false, error: 'Invalid account number') unless valid_account_number?(account_number)
     return OperationResult.new(success: false, error: 'Invalid routing number') unless valid_routing_number?(routing_number)
+    return OperationResult.new(success: false, error: 'Invalid amount') unless valid_amount?(amount)
 
     OperationResult.new(success: true, message: 'Validation passed')
   end
@@ -64,41 +76,17 @@ class BankTransferValidator
   end
 end
 
-class AmountValidator
-  AMOUNT_MIN = 0
-
-  def validate(amount:)
-    return OperationResult.new(success: false, error: 'Invalid amount') unless valid_amount?(amount)
-
-    OperationResult.new(success: true, message: 'Validation passed')
-  end
-
-  private
-
-  def valid_amount?(amount)
-    amount > AMOUNT_MIN
-  end
-end
-
 class PaymentProcessor
   def process_credit_card(amount, card_number, cvv)
     puts "[#{Time.now}] Starting credit card payment processing"
     puts "[#{Time.now}] Amount: #{amount}"
 
     credit_card_validator = CreditCardValidator.new
-    credit_card_validation_result = credit_card_validator.validate(card_number:, cvv:)
+    credit_card_validation_result = credit_card_validator.validate(card_number:, cvv:, amount:)
 
     unless credit_card_validation_result.success?
       puts "[#{Time.now}] ERROR: #{credit_card_validation_result.info}"
       return credit_card_validation_result.to_h
-    end
-
-    amount_validator = AmountValidator.new
-    amount_validation_result = amount_validator.validate(amount:)
-
-    unless amount_validation_result.success?
-      puts "[#{Time.now}] ERROR: #{amount_validation_result.info}"
-      return amount_validation_result.to_h
     end
 
     puts "[#{Time.now}] Validation passed"
@@ -118,19 +106,11 @@ class PaymentProcessor
     puts "[#{Time.now}] Amount: #{amount}"
 
     bank_transfer_validator = BankTransferValidator.new
-    bank_transfer_validation_result = bank_transfer_validator.validate(account_number:, routing_number:)
+    bank_transfer_validation_result = bank_transfer_validator.validate(account_number:, routing_number:, amount:)
 
     unless bank_transfer_validation_result.success?
       puts "[#{Time.now}] ERROR: #{bank_transfer_validation_result.info}"
       return bank_transfer_validation_result.to_h
-    end
-
-    amount_validator = AmountValidator.new
-    amount_validation_result = amount_validator.validate(amount:)
-
-    unless amount_validation_result.success?
-      puts "[#{Time.now}] ERROR: #{amount_validation_result.info}"
-      return amount_validation_result.to_h
     end
 
     puts "[#{Time.now}] Validation passed"
