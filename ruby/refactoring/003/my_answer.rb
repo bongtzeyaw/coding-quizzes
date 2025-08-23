@@ -20,7 +20,7 @@ class SalesReport
   end
 
   def calculate_total_sales(sales_records)
-    sales_records.map { |record| record[:amount]}.sum
+    sales_records.map { |record| record[:amount] }.sum
   end
 
   def calculate_average_sales(sales_records)
@@ -28,7 +28,7 @@ class SalesReport
   end
 
   def calculate_max_sales(sales_records)
-    sales_records.map { |record| record[:amount]}.max
+    sales_records.map { |record| record[:amount] }.max
   end
 
   def calculate_total_sales_by_category(sales_records)
