@@ -14,7 +14,7 @@ class WeatherAPITest < Minitest::Test
 
     Net::HTTP.stub :get_response, mock_response, URI('https://api.weather.example.com/v1/current?city=Tokyo') do
       expected_output = "Weather in Tokyo: Temperature: 25°C, Description: Clear skies, Humidity: 60%, Wind: 10km/h"
-      assert_equal expected_output, @api.get_weather('Tokyo')
+      assert_equal expected_output, @api.get_weather(city: 'Tokyo')
     end
   end
 
@@ -23,7 +23,7 @@ class WeatherAPITest < Minitest::Test
     mock_response.expect :code, '404'
 
     Net::HTTP.stub :get_response, mock_response, URI('https://api.weather.example.com/v1/current?city=NonExistentCity') do
-      assert_equal 'City not found', @api.get_weather('NonExistentCity')
+      assert_equal 'City not found', @api.get_weather(city: 'NonExistentCity')
     end
   end
 
@@ -32,7 +32,7 @@ class WeatherAPITest < Minitest::Test
     mock_response.expect :code, '500'
 
     Net::HTTP.stub :get_response, mock_response, URI('https://api.weather.example.com/v1/current?city=Tokyo') do
-      assert_equal 'Server error', @api.get_weather('Tokyo')
+      assert_equal 'Server error', @api.get_weather(city: 'Tokyo')
     end
   end
 
@@ -41,16 +41,16 @@ class WeatherAPITest < Minitest::Test
     mock_response.expect :code, ''
 
     Net::HTTP.stub :get_response, mock_response, URI('https://api.weather.example.com/v1/current?city=Tokyo') do
-      assert_equal 'Unknown error', @api.get_weather('Tokyo')
+      assert_equal 'Unknown error', @api.get_weather(city: 'Tokyo')
     end
   end
 
   def test_get_weather_invalid_city_is_nil
-    assert_nil @api.get_weather(nil)
+    assert_nil @api.get_weather(city: nil)
   end
 
   def test_get_weather_invalid_city_is_empty
-    assert_nil @api.get_weather('')
+    assert_nil @api.get_weather(city: '')
   end
 
   def test_get_forecast_successful_response
@@ -60,7 +60,7 @@ class WeatherAPITest < Minitest::Test
 
     Net::HTTP.stub :get_response, mock_response, URI('https://api.weather.example.com/v1/forecast?city=Tokyo&days=2') do
       expected_output = "2-day forecast for Tokyo:\n2025-08-09: 28°C, Sunny\n2025-08-10: 26°C, Partly cloudy\n"
-      assert_equal expected_output, @api.get_forecast('Tokyo', 2)
+      assert_equal expected_output, @api.get_forecast(city: 'Tokyo', days: 2)
     end
   end
 
@@ -69,7 +69,7 @@ class WeatherAPITest < Minitest::Test
     mock_response.expect :code, '404'
 
     Net::HTTP.stub :get_response, mock_response, URI('https://api.weather.example.com/v1/forecast?city=NonExistentCity&days=3') do
-      assert_equal 'City not found', @api.get_forecast('NonExistentCity', 3)
+      assert_equal 'City not found', @api.get_forecast(city: 'NonExistentCity', days: 3)
     end
   end
 
@@ -78,7 +78,7 @@ class WeatherAPITest < Minitest::Test
     mock_response.expect :code, '500'
 
     Net::HTTP.stub :get_response, mock_response, URI('https://api.weather.example.com/v1/forecast?city=Tokyo&days=3') do
-      assert_equal 'Server error', @api.get_forecast('Tokyo', 3)
+      assert_equal 'Server error', @api.get_forecast(city: 'Tokyo', days: 3)
     end
   end
 
@@ -87,27 +87,27 @@ class WeatherAPITest < Minitest::Test
     mock_response.expect :code, ''
 
     Net::HTTP.stub :get_response, mock_response, URI('https://api.weather.example.com/v1/forecast?city=Tokyo&days=3') do
-      assert_equal 'Unknown error', @api.get_forecast('Tokyo', 3)
+      assert_equal 'Unknown error', @api.get_forecast(city: 'Tokyo', days: 3)
     end
   end
 
   def test_get_forecast_invalid_city_is_nil
-    assert_nil @api.get_forecast(nil, 3)
+    assert_nil @api.get_forecast(city: nil, days: 3)
   end
 
   def test_get_forecast_invalid_city_is_empty
-    assert_nil @api.get_forecast('', 3)
+    assert_nil @api.get_forecast(city: '', days: 3)
   end
 
   def test_get_forecast_invalid_days_is_nil
-    assert_nil @api.get_forecast('Tokyo', nil)
+    assert_nil @api.get_forecast(city: 'Tokyo', days: nil)
   end
 
   def test_get_forecast_invalid_days_is_less_than_one
-    assert_nil @api.get_forecast('Tokyo', 0)
+    assert_nil @api.get_forecast(city: 'Tokyo', days: 0)
   end
 
   def test_get_forecast_invalid_days_is_greater_than_seven
-    assert_nil @api.get_forecast('Tokyo', 8)
+    assert_nil @api.get_forecast(city: 'Tokyo', days: 8)
   end
 end

@@ -74,7 +74,7 @@ end
 class WeatherAPI
   BASE_PATH = 'https://api.weather.example.com/v1/'
 
-  def get_weather(city)
+  def get_weather(city:)
     with_error_handling do
       return nil unless valid_city_input?(city)
 
@@ -84,7 +84,7 @@ class WeatherAPI
     end
   end
 
-  def get_forecast(city, days)
+  def get_forecast(city:, days:)
     with_error_handling do
       return nil unless valid_city_input?(city) && valid_days_input?(days)
 
