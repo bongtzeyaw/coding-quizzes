@@ -65,10 +65,6 @@ class ItemCollection
     @items.reject! { |item| item[:id] == item_id }
   end
 
-  def calculate_subtotal
-    @items.sum { |item| item[:price] * item[:quantity] }
-  end
-
   private
 
   def find(item_id)
@@ -99,7 +95,7 @@ class CheckoutTotalCalculator
   private
 
   def calculate_subtotal(items_collection)
-    items_collection.calculate_subtotal
+    items_collection.items.sum { |item| item[:price] * item[:quantity] }
   end
 
   def discount_multiplier
