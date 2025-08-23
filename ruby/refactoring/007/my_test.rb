@@ -78,6 +78,15 @@ class ShoppingCartTest < Minitest::Test
     assert_equal (1000 * 1 * (1 + DEFAULT_TAX_RATE)), @cart.get_total
   end
 
+  def test_apply_multiple_coupons
+    item1 = {id: 1, name: 'Laptop', price: 1000, quantity: 1}
+    @cart.add_item(item1)
+    assert @cart.apply_coupon('SAVE20')
+    assert @cart.apply_coupon('SAVE10')
+    # Only last coupon is applied
+    assert_equal (1000 * 1 * (1 - 0.1) * (1 + DEFAULT_TAX_RATE)) + DEFAULT_SHIPPING_FEE, @cart.get_total
+  end
+
   def test_apply_coupon_invalid
     item1 = {id: 1, name: 'Laptop', price: 1000, quantity: 1}
     @cart.add_item(item1)
