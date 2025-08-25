@@ -1,3 +1,10 @@
+# Database placeholder implementation to be replaced
+module Database
+  def self.execute(sql)
+    []
+  end
+end
+
 class UserService
   def get_user_info(user_id)
     user_sql = "SELECT * FROM users WHERE id = #{user_id}"
