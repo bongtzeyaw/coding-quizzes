@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 # Database placeholder implementation to be replaced
 module Database
   def self.execute(sql)
@@ -77,14 +79,63 @@ class User
   end
 end
 
+class UserRegistry
+  DEFAULT_PAGE_SIZE = 20
+
+  def self.find_by(id:)
+    result = Database.execute(
+      format(
+        'SELECT * FROM users WHERE id = %<id>s',
+        id:
+      )
+    ).first
+
+    return nil unless result
+
+    User.new(result)
+  end
+
+  def self.search_by_name_or_email(keyword:, page:)
+    offset = calculate_pagination_offset(page)
+    sql = build_search_query(keyword, offset)
+
+    results = Database.execute(sql)
+    results.map { |result| User.new(result) }
+  end
+
+  def self.calculate_pagination_offset(page)
+    (page - 1) * DEFAULT_PAGE_SIZE
+  end
+
+  def self.build_search_condition_query(keyword)
+    if keyword.nil? || keyword.empty?
+      ''
+    else
+      format(
+        "WHERE name LIKE '%%%<keyword>s%%' OR email LIKE '%%%<keyword>s%%' ",
+        keyword:
+      )
+    end
+  end
+
+  def self.build_search_query(keyword, offset)
+    search_condition_query = build_search_condition_query(keyword)
+
+    format(
+      'SELECT * FROM users %<search_condition_query>sORDER BY created_at DESC LIMIT %<limit>s OFFSET %<offset>s',
+      search_condition_query:,
+      limit: DEFAULT_PAGE_SIZE,
+      offset:
+    )
+  end
+
+  private_class_method :calculate_pagination_offset, :build_search_condition_query, :build_search_query
+end
+
 class UserService
   def get_user_info(user_id)
-    user_sql = "SELECT * FROM users WHERE id = #{user_id}"
-    user_result = Database.execute(user_sql)
-
-    return nil if user_result.empty?
-
-    user = User.new(user_result[0])
+    user = UserRegistry.find_by(id: user_id)
+    return nil unless user
 
     {
       id: user.id,
@@ -98,33 +149,15 @@ class UserService
   end
 
   def search_users(keyword, page = 1)
-    limit = 20
-    offset = (page - 1) * limit
+    users = UserRegistry.search_by_name_or_email(keyword:, page:)
 
-    if [nil, ''].include?(keyword)
-      sql = "SELECT * FROM users ORDER BY created_at DESC LIMIT #{limit} OFFSET #{offset}"
-    else
-      sql = "SELECT * FROM users WHERE name LIKE '%#{keyword}%' OR email LIKE '%#{keyword}%' ORDER BY created_at DESC LIMIT #{limit} OFFSET #{offset}"
-    end
-
-    results = Database.execute(sql)
-
-    users = []
-    for i in 0..results.length - 1
-      user = results[i]
-
-      posts_sql = "SELECT COUNT(*) as count FROM posts WHERE user_id = #{user['id']}"
-      posts_result = Database.execute(posts_sql)
-      posts_count = posts_result[0]['count']
-
-      users << {
-        id: user['id'],
-        name: user['name'],
-        email: user['email'],
-        posts_count: posts_count
+    users.map do |user|
+      {
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        posts_count: user.posts_count
       }
     end
-
-    users
   end
 end
