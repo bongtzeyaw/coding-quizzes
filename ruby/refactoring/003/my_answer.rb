@@ -2,20 +2,20 @@
 
 class SalesReport
   def generate_report(sales_data)
-    completed_sales_records = filter_completed_sales_records(sales_data)
+    non_cancelled_sales_records = filter_non_cancelled_sales_records(sales_data)
 
     {
-      total: calculate_total_sales(completed_sales_records),
-      average: calculate_average_sales(completed_sales_records),
-      max: calculate_max_sales(completed_sales_records),
-      by_category: calculate_total_sales_by_category(completed_sales_records),
-      vip_sales: calculate_vip_total_sales(completed_sales_records)
+      total: calculate_total_sales(non_cancelled_sales_records),
+      average: calculate_average_sales(non_cancelled_sales_records),
+      max: calculate_max_sales(non_cancelled_sales_records),
+      by_category: calculate_total_sales_by_category(non_cancelled_sales_records),
+      vip_sales: calculate_vip_total_sales(non_cancelled_sales_records)
     }
   end
 
   private
 
-  def filter_completed_sales_records(sales_records)
+  def filter_non_cancelled_sales_records(sales_records)
     sales_records.filter { |record| record[:status] != 'cancelled' }
   end
 
