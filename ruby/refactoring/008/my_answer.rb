@@ -8,7 +8,7 @@ module Database
 end
 
 class User
-  DEFAULT_NUMBER_OF_LATEST_POSTS = 5
+  LATEST_POSTS_LIMIT = 5
 
   def initialize(user_record)
     @user_record = user_record
@@ -27,33 +27,24 @@ class User
   end
 
   def posts_count
-    extract_count(table: 'posts', foreign_key: 'user_id')
+    count_records(table: 'posts', foreign_key: 'user_id')
   end
 
   def followers_count
-    extract_count(table: 'follows', foreign_key: 'followed_id')
+    count_records(table: 'follows', foreign_key: 'followed_id')
   end
 
   def following_count
-    extract_count(table: 'follows', foreign_key: 'follower_id')
+    count_records(table: 'follows', foreign_key: 'follower_id')
   end
 
   def latest_posts
-    extract_user_associated_records(table: 'posts', foreign_key: 'user_id')
+    fetch_user_associated_records(table: 'posts', foreign_key: 'user_id', limit: LATEST_POSTS_LIMIT)
   end
 
   private
 
-  def extract_user_record
-    Database.execute(
-      format(
-        'SELECT * FROM users WHERE id = %<id>s',
-        id:
-      )
-    ).first
-  end
-
-  def extract_count(table:, foreign_key:)
+  def count_records(table:, foreign_key:)
     result = Database.execute(
       format(
         'SELECT COUNT(*) as count FROM %<table>s WHERE %<foreign_key>s = %<id>s',
@@ -66,7 +57,7 @@ class User
     result['count']
   end
 
-  def extract_user_associated_records(table:, foreign_key:, limit: DEFAULT_NUMBER_OF_LATEST_POSTS)
+  def fetch_user_associated_records(table:, foreign_key:, limit:)
     Database.execute(
       format(
         'SELECT * FROM %<table>s WHERE %<foreign_key>s = %<id>s ORDER BY created_at DESC LIMIT %<limit>s',
