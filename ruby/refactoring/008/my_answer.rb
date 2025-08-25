@@ -5,6 +5,78 @@ module Database
   end
 end
 
+class User
+  DEFAULT_NUMBER_OF_LATEST_POSTS = 5
+
+  def initialize(user_record)
+    @user_record = user_record
+  end
+
+  def id
+    @user_record['id']
+  end
+
+  def name
+    @user_record['name']
+  end
+
+  def email
+    @user_record['email']
+  end
+
+  def posts_count
+    extract_count(table: 'posts', foreign_key: 'user_id')
+  end
+
+  def followers_count
+    extract_count(table: 'follows', foreign_key: 'followed_id')
+  end
+
+  def following_count
+    extract_count(table: 'follows', foreign_key: 'follower_id')
+  end
+
+  def latest_posts
+    extract_user_associated_records(table: 'posts', foreign_key: 'user_id')
+  end
+
+  private
+
+  def extract_user_record
+    Database.execute(
+      format(
+        'SELECT * FROM users WHERE id = %<id>s',
+        id:
+      )
+    ).first
+  end
+
+  def extract_count(table:, foreign_key:)
+    result = Database.execute(
+      format(
+        'SELECT COUNT(*) as count FROM %<table>s WHERE %<foreign_key>s = %<id>s',
+        table:,
+        foreign_key:,
+        id:
+      )
+    ).first
+
+    result['count']
+  end
+
+  def extract_user_associated_records(table:, foreign_key:, limit: DEFAULT_NUMBER_OF_LATEST_POSTS)
+    Database.execute(
+      format(
+        'SELECT * FROM %<table>s WHERE %<foreign_key>s = %<id>s ORDER BY created_at DESC LIMIT %<limit>s',
+        table:,
+        foreign_key:,
+        id:,
+        limit:
+      )
+    )
+  end
+end
+
 class UserService
   def get_user_info(user_id)
     user_sql = "SELECT * FROM users WHERE id = #{user_id}"
@@ -12,31 +84,16 @@ class UserService
 
     return nil if user_result.empty?
 
-    user = user_result[0]
-
-    posts_sql = "SELECT COUNT(*) as count FROM posts WHERE user_id = #{user_id}"
-    posts_result = Database.execute(posts_sql)
-    posts_count = posts_result[0]['count']
-
-    followers_sql = "SELECT COUNT(*) as count FROM follows WHERE followed_id = #{user_id}"
-    followers_result = Database.execute(followers_sql)
-    followers_count = followers_result[0]['count']
-
-    following_sql = "SELECT COUNT(*) as count FROM follows WHERE follower_id = #{user_id}"
-    following_result = Database.execute(following_sql)
-    following_count = following_result[0]['count']
-
-    latest_posts_sql = "SELECT * FROM posts WHERE user_id = #{user_id} ORDER BY created_at DESC LIMIT 5"
-    latest_posts = Database.execute(latest_posts_sql)
+    user = User.new(user_result[0])
 
     {
-      id: user['id'],
-      name: user['name'],
-      email: user['email'],
-      posts_count: posts_count,
-      followers_count: followers_count,
-      following_count: following_count,
-      latest_posts: latest_posts
+      id: user.id,
+      name: user.name,
+      email: user.email,
+      posts_count: user.posts_count,
+      followers_count: user.followers_count,
+      following_count: user.following_count,
+      latest_posts: user.latest_posts
     }
   end
 
