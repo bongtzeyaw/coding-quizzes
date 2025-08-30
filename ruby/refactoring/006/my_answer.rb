@@ -81,7 +81,7 @@ class PaymentProcessLogger
     puts "[#{Time.now}] ERROR: #{validation_result.info}"
   end
 
-  def self.with_logging_for_validation_phase(operation_title:, amount:)
+  def self.with_validation_logging(operation_title:, amount:)
     puts "[#{Time.now}] Starting #{operation_title} processing"
     puts "[#{Time.now}] Amount: #{amount}"
 
@@ -90,7 +90,7 @@ class PaymentProcessLogger
     puts "[#{Time.now}] Validation passed"
   end
 
-  def self.with_logging_for_processing_phase(operation_action_name:, transaction_id:)
+  def self.with_processing_logging(operation_action_name:, transaction_id:)
     puts "[#{Time.now}] Processing #{operation_action_name}..."
 
     yield
@@ -105,7 +105,7 @@ class PaymentProcessor
     operation_title = 'credit card payment'
     operation_action_name = 'payment'
 
-    PaymentProcessLogger.with_logging_for_validation_phase(operation_title:, amount:) do
+    PaymentProcessLogger.with_validation_logging(operation_title:, amount:) do
       credit_card_validator = CreditCardValidator.new
       credit_card_validation_result = credit_card_validator.validate(card_number:, cvv:, amount:)
 
@@ -117,7 +117,7 @@ class PaymentProcessor
 
     transaction_id = "TXN#{Time.now.to_i}"
 
-    PaymentProcessLogger.with_logging_for_processing_phase(operation_action_name:, transaction_id:) do
+    PaymentProcessLogger.with_processing_logging(operation_action_name:, transaction_id:) do
       sleep(0.5)
     end
 
@@ -128,7 +128,7 @@ class PaymentProcessor
     operation_title = 'bank transfer'
     operation_action_name = 'transfer'
 
-    PaymentProcessLogger.with_logging_for_validation_phase(operation_title:, amount:) do
+    PaymentProcessLogger.with_validation_logging(operation_title:, amount:) do
       bank_transfer_validator = BankTransferValidator.new
       bank_transfer_validation_result = bank_transfer_validator.validate(account_number:, routing_number:, amount:)
 
@@ -140,7 +140,7 @@ class PaymentProcessor
 
     transaction_id = "BNK#{Time.now.to_i}"
 
-    PaymentProcessLogger.with_logging_for_processing_phase(operation_action_name:, transaction_id:) do
+    PaymentProcessLogger.with_processing_logging(operation_action_name:, transaction_id:) do
       sleep(1.0)
     end
 
