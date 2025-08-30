@@ -101,7 +101,7 @@ class PaymentProcessLogger
 end
 
 class PaymentProcessor
-  def process_credit_card(amount, card_number, cvv)
+  def self.process_credit_card(amount, card_number, cvv)
     operation_title = 'credit card payment'
     operation_action_name = 'payment'
 
@@ -124,7 +124,7 @@ class PaymentProcessor
     OperationResult.new(success: true, transaction_id:).to_h
   end
 
-  def process_bank_transfer(amount, account_number, routing_number)
+  def self.process_bank_transfer(amount, account_number, routing_number)
     operation_title = 'bank transfer'
     operation_action_name = 'transfer'
 
