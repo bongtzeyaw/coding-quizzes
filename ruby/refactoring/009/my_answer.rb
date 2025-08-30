@@ -119,44 +119,109 @@ class ShippingServiceClient
   end
 end
 
-class OrderProcessor
-  def process_order(order)
-    stock_availability_result = StockManagerClient.check_stock_availability(order)
-    return stock_availability_result unless stock_availability_result[:success]
-
+class StockReductionHandler
+  def handle(order)
     StockManagerClient.reduce_stock(order)
-    confirm_order!(order)
+  end
+end
 
+class CustomerNotificationHandler
+  def handle(order)
     EmailServiceClient.send_order_confirmation_email(order)
+  end
+end
 
+class SlackNotificationHandler
+  def handle(order)
     SlackNotifierClient.notify_order_confirmation(order)
+  end
+end
 
-    if order_from_customer?(order)
-      points = calculate_points(order)
+class PointsObtentionHandler
+  OBTAINED_POINT_PER_AMOUNT_RATE = 0.01
 
-      CustomerServiceClient.add_points(order, points)
-      EmailServiceClient.send_points_obtention_notification_email(order, points)
-    end
+  def handle(order)
+    return unless order_from_customer?(order)
 
-    AnalyticsClient.track(order)
-    ShippingServiceClient.create_shipment(order)
+    points = calculate_points(order.total_amount)
 
-    { success: true, order_id: order.id }
+    CustomerServiceClient.add_points(order, points)
+    EmailServiceClient.send_points_obtention_notification_email(order, points)
   end
 
   private
-
-  def confirm_order!(order)
-    order.status = 'confirmed'
-    order.confirmed_at = Time.now
-    order.save
-  end
 
   def order_from_customer?(order)
     order.customer_id
   end
 
-  def calculate_points(order)
-    (order.total_amount * 0.01).to_i
+  def calculate_points(total_amount)
+    (total_amount * OBTAINED_POINT_PER_AMOUNT_RATE).to_i
+  end
+end
+
+class AnalyticsTrackHandler
+  def handle(order)
+    AnalyticsClient.track(order)
+  end
+end
+
+class ShipmentCreationHandler
+  def handle(order)
+    ShippingServiceClient.create_shipment(order)
+  end
+end
+
+class EventBus
+  def initialize
+    @handlers = Hash.new { |h, k| h[k] = [] }
+  end
+
+  def subscribe(event, handler)
+    @handlers[event] << handler
+  end
+
+  def publish(event, data)
+    @handlers[event].each do |handler|
+      handler.handle(data)
+    rescue StandardError => e
+      puts "Event handler error: #{e.message}"
+    end
+  end
+end
+
+class OrderProcessor
+  def initialize
+    @event_bus = EventBus.new
+    setup_event_handlers
+  end
+
+  def process_order(order)
+    stock_availability_result = StockManagerClient.check_stock_availability(order)
+    return stock_availability_result unless stock_availability_result[:success]
+
+    confirm_order!(order)
+    @event_bus.publish(:order_confirmed, order)
+
+    { success: true, order_id: order.id }
+  rescue StandardError => e
+    { success: false, error: e.message }
+  end
+
+  private
+
+  def setup_event_handlers
+    @event_bus.subscribe(:order_confirmed, StockReductionHandler.new)
+    @event_bus.subscribe(:order_confirmed, CustomerNotificationHandler.new)
+    @event_bus.subscribe(:order_confirmed, SlackNotificationHandler.new)
+    @event_bus.subscribe(:order_confirmed, PointsObtentionHandler.new)
+    @event_bus.subscribe(:order_confirmed, AnalyticsTrackHandler.new)
+    @event_bus.subscribe(:order_confirmed, ShipmentCreationHandler.new)
+  end
+
+  def confirm_order!(order)
+    order.status = 'confirmed'
+    order.confirmed_at = Time.now
+    order.save
   end
 end
