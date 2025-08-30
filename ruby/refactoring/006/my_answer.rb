@@ -102,48 +102,52 @@ end
 
 class PaymentProcessor
   def self.process_credit_card(amount:, card_number:, cvv:)
-    operation_title = 'credit card payment'
-    operation_action_name = 'payment'
-
-    PaymentProcessLogger.with_validation_logging(operation_title:, amount:) do
-      credit_card_validator = CreditCardValidator.new
-      credit_card_validation_result = credit_card_validator.validate(card_number:, cvv:, amount:)
-
-      unless credit_card_validation_result.success?
-        PaymentProcessLogger.log_validation_error(credit_card_validation_result)
-        return credit_card_validation_result.to_h
-      end
-    end
-
-    transaction_id = "TXN#{Time.now.to_i}"
-
-    PaymentProcessLogger.with_processing_logging(operation_action_name:, transaction_id:) do
-      sleep(0.5)
-    end
-
-    OperationResult.new(success: true, transaction_id:).to_h
+    process_operation(
+      operation_title: 'credit card payment',
+      operation_action_name: 'payment',
+      transaction_prefix: 'TXN',
+      validator: CreditCardValidator.new,
+      validation_args: { amount:, card_number:, cvv: },
+      processing_proc: -> { sleep(0.5) }
+    )
   end
 
   def self.process_bank_transfer(amount:, account_number:, routing_number:)
-    operation_title = 'bank transfer'
-    operation_action_name = 'transfer'
+    process_operation(
+      operation_title: 'bank transfer',
+      operation_action_name: 'transfer',
+      transaction_prefix: 'BNK',
+      validator: BankTransferValidator.new,
+      validation_args: { amount:, account_number:, routing_number: },
+      processing_proc: -> { sleep(1.0) }
+    )
+  end
 
-    PaymentProcessLogger.with_validation_logging(operation_title:, amount:) do
-      bank_transfer_validator = BankTransferValidator.new
-      bank_transfer_validation_result = bank_transfer_validator.validate(account_number:, routing_number:, amount:)
+  def self.process_operation(
+    operation_title:,
+    operation_action_name:,
+    transaction_prefix:,
+    validator:,
+    validation_args:,
+    processing_proc:
+  )
+    PaymentProcessLogger.with_validation_logging(operation_title:, amount: validation_args[:amount]) do
+      validation_result = validator.validate(**validation_args)
 
-      unless bank_transfer_validation_result.success?
-        PaymentProcessLogger.log_validation_error(bank_transfer_validation_result)
-        return bank_transfer_validation_result.to_h
+      unless validation_result.success?
+        PaymentProcessLogger.log_validation_error(validation_result)
+        return validation_result.to_h
       end
     end
 
-    transaction_id = "BNK#{Time.now.to_i}"
+    transaction_id = "#{transaction_prefix}#{Time.now.to_i}"
 
     PaymentProcessLogger.with_processing_logging(operation_action_name:, transaction_id:) do
-      sleep(1.0)
+      processing_proc.call
     end
 
     OperationResult.new(success: true, transaction_id:).to_h
   end
+
+  private_class_method :process_operation
 end
