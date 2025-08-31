@@ -27,19 +27,19 @@ class User
   end
 
   def posts_count
-    count_records(table: 'posts', foreign_key: 'user_id')
+    @posts_count ||= count_records(table: 'posts', foreign_key: 'user_id')
   end
 
   def followers_count
-    count_records(table: 'follows', foreign_key: 'followed_id')
+    @followers_count ||= count_records(table: 'follows', foreign_key: 'followed_id')
   end
 
   def following_count
-    count_records(table: 'follows', foreign_key: 'follower_id')
+    @following_count ||= count_records(table: 'follows', foreign_key: 'follower_id')
   end
 
   def latest_posts
-    fetch_user_associated_records(table: 'posts', foreign_key: 'user_id', limit: LATEST_POSTS_LIMIT)
+    @latest_posts ||= fetch_user_associated_records(table: 'posts', foreign_key: 'user_id', limit: LATEST_POSTS_LIMIT)
   end
 
   private
