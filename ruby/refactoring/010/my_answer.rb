@@ -13,6 +13,19 @@ class ValidationResult
   end
 end
 
+class ProcessingResult
+  attr_reader :data
+
+  def initialize(success:, data: {})
+    @success = success
+    @data = data
+  end
+
+  def success?
+    @success
+  end
+end
+
 class FileValidator
   MAX_FILE_SIZE = 10 * 1024 * 1024 # 10MB
 
@@ -50,6 +63,122 @@ class FileValidator
   end
 end
 
+class CSVRowColumnsValidator
+  def initialize(columns:, line_number:)
+    @columns = columns
+    @line_number = line_number
+  end
+
+  def validate(header_columns:)
+    if @columns.length == header_columns.length
+      ValidationResult.new(success: true)
+    else
+      error_response('Column count mismatch')
+    end
+  end
+
+  private
+
+  def error_response(message)
+    ValidationResult.new(
+      success: false,
+      info: "Line #{@line_number}: #{message}"
+    )
+  end
+end
+
+class CSVRowDataValidator
+  VALID_EMAIL_FORMAT = /\A[\w+\-.]+@[a-z\d-]+(\.[a-z\d-]+)*\.[a-z]+\z/i
+  VALID_CREATED_AT_FORMAT = '%Y-%m-%d'
+
+  def initialize(row:, line_number:)
+    @row = row
+    @line_number = line_number
+  end
+
+  def validate
+    return error_response('Invalid email format') if data_exists?('email') && invalid_email?
+    return error_response('Invalid age') if data_exists?('age') && invalid_age?
+    return error_response('Invalid date format') if data_exists?('created_at') && invalid_created_at?
+
+    ValidationResult.new(success: true)
+  end
+
+  private
+
+  def data_exists?(column_name)
+    !@row[column_name].nil?
+  end
+
+  def invalid_email?
+    !@row['email'].match(VALID_EMAIL_FORMAT)
+  end
+
+  def invalid_age?
+    @row['age'].to_i.negative?
+  end
+
+  def invalid_created_at?
+    Time.parse(@row['created_at']).strftime(VALID_CREATED_AT_FORMAT)
+    false
+  rescue StandardError
+    true
+  end
+
+  def error_response(message)
+    ValidationResult.new(
+      success: false,
+      info: "Line #{@line_number}: #{message}"
+    )
+  end
+end
+
+class CSVRowProcessor
+  def initialize(line:, line_number:, header_columns:)
+    @line = line
+    @line_number = line_number
+    @header_columns = header_columns
+    @columns = extract_columns(line)
+  end
+
+  def process
+    columns_validation_result = CSVRowColumnsValidator.new(
+      columns: @columns,
+      line_number: @line_number
+    ).validate(header_columns: @header_columns)
+
+    return columns_validation_result unless columns_validation_result.success?
+
+    row = @header_columns.zip(@columns).to_h
+
+    row_data_validation_result = CSVRowDataValidator.new(
+      row:,
+      line_number: @line_number
+    ).validate
+
+    return row_data_validation_result unless row_data_validation_result.success?
+
+    process_name!(row)
+    process_created_at!(row)
+
+    ProcessingResult.new(success: true, data: row)
+  end
+
+  private
+
+  def extract_columns(line)
+    line.split(',')
+  end
+
+  def process_name!(row)
+    row['name'] = row['name'].upcase if row['name']
+  end
+
+  def process_created_at!(row)
+    row['created_at'] = Time.parse(row['created_at']).strftime(CSVRowDataValidator::VALID_CREATED_AT_FORMAT)
+  end
+end
+
 class CSVFileProcessor
   def initialize(file_path)
     @file_path = file_path
@@ -65,39 +194,14 @@ class CSVFileProcessor
     lines.drop(header_offset).each.with_index(header_offset) do |line, index|
       line_number = index + 1
 
-      columns = line.split(',')
+      csv_row_processor = CSVRowProcessor.new(line:, line_number:, header_columns:)
+      operation_result = csv_row_processor.process
 
-      if columns.length != header_columns.length
-        @errors << "Line #{line_number}: Column count mismatch"
-        next
+      if operation_result.success?
+        @results << operation_result.data
+      else
+        @errors << operation_result.info
       end
-
-      row = {}
-      for j in 0..header_columns.length - 1
-        row[header_columns[j]] = columns[j]
-      end
-
-      if row['email'] && !row['email'].match(/\A[\w+\-.]+@[a-z\d-]+(\.[a-z\d-]+)*\.[a-z]+\z/i)
-        @errors << "Line #{line_number}: Invalid email format"
-        next
-      end
-
-      if row['age'] && row['age'].to_i < 0
-        @errors << "Line #{line_number}: Invalid age"
-        next
-      end
-
-      row['name'] = row['name'].upcase if row['name']
-
-      if row['created_at']
-        begin
-          row['created_at'] = Time.parse(row['created_at']).strftime('%Y-%m-%d')
-        rescue StandardError
-          @errors << "Line #{line_number}: Invalid date format"
-          next
-        end
-      end
-      @results << row
     end
 
     summary
