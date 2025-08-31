@@ -106,32 +106,43 @@ class UserRegistry
   private_class_method :calculate_pagination_offset, :build_search_query
 end
 
+class UserPresenter
+  def initialize(user)
+    @user = user
+  end
+
+  def detailed_info
+    {
+      id: @user.id,
+      name: @user.name,
+      email: @user.email,
+      posts_count: @user.posts_count,
+      followers_count: @user.followers_count,
+      following_count: @user.following_count,
+      latest_posts: @user.latest_posts
+    }
+  end
+
+  def summarised_info
+    {
+      id: @user.id,
+      name: @user.name,
+      email: @user.email,
+      posts_count: @user.posts_count
+    }
+  end
+end
+
 class UserService
   def get_user_info(user_id)
     user = UserRegistry.find_by(id: user_id)
     return nil unless user
 
-    {
-      id: user.id,
-      name: user.name,
-      email: user.email,
-      posts_count: user.posts_count,
-      followers_count: user.followers_count,
-      following_count: user.following_count,
-      latest_posts: user.latest_posts
-    }
+    UserPresenter.new(user).detailed_info
   end
 
   def search_users(keyword, page = 1)
     users = UserRegistry.search_by_name_or_email(keyword:, page:)
-
-    users.map do |user|
-      {
-        id: user.id,
-        name: user.name,
-        email: user.email,
-        posts_count: user.posts_count
-      }
-    end
+    users.map { |user| UserPresenter.new(user).summarised_info }
   end
 end
