@@ -1,11 +1,8 @@
 # frozen_string_literal: true
 
-class ValidationResult
-  attr_reader :info
-
-  def initialize(success:, info: '')
+class OperationResult
+  def initialize(success:)
     @success = success
-    @info = info
   end
 
   def success?
@@ -13,16 +10,21 @@ class ValidationResult
   end
 end
 
-class ProcessingResult
+class ValidationResult < OperationResult
+  attr_reader :info
+
+  def initialize(success:, info: '')
+    super(success:)
+    @info = info
+  end
+end
+
+class ProcessingResult < OperationResult
   attr_reader :data
 
   def initialize(success:, data: {})
-    @success = success
+    super(success:)
     @data = data
-  end
-
-  def success?
-    @success
   end
 end
 
