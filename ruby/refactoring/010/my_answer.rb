@@ -236,8 +236,6 @@ class FileProcessor
     validation_result = FileValidator.new(file_path).validate
     return validation_result.info unless validation_result.success?
 
-    return 'Error: File not found' unless File.exist?(file_path)
-
     CSVFileProcessor.new(file_path).process
   end
 end
