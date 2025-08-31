@@ -2,7 +2,7 @@
 
 # Database placeholder implementation to be replaced
 module Database
-  def self.execute(sql)
+  def self.execute(sql, params = [])
     []
   end
 end
@@ -46,12 +46,8 @@ class User
 
   def count_records(table:, foreign_key:)
     result = Database.execute(
-      format(
-        'SELECT COUNT(*) as count FROM %<table>s WHERE %<foreign_key>s = %<id>s',
-        table:,
-        foreign_key:,
-        id:
-      )
+      "SELECT COUNT(*) as count FROM #{table} WHERE #{foreign_key} = ?",
+      [id]
     ).first
 
     result['count']
@@ -59,13 +55,8 @@ class User
 
   def fetch_user_associated_records(table:, foreign_key:, limit:)
     Database.execute(
-      format(
-        'SELECT * FROM %<table>s WHERE %<foreign_key>s = %<id>s ORDER BY created_at DESC LIMIT %<limit>s',
-        table:,
-        foreign_key:,
-        id:,
-        limit:
-      )
+      "SELECT * FROM #{table} WHERE #{foreign_key} = ? ORDER BY created_at DESC LIMIT ?",
+      [id, limit]
     )
   end
 end
@@ -75,10 +66,8 @@ class UserRegistry
 
   def self.find_by(id:)
     result = Database.execute(
-      format(
-        'SELECT * FROM users WHERE id = %<id>s',
-        id:
-      )
+      'SELECT * FROM users WHERE id = ?',
+      [id]
     ).first
 
     return nil unless result
@@ -88,9 +77,9 @@ class UserRegistry
 
   def self.search_by_name_or_email(keyword:, page:)
     offset = calculate_pagination_offset(page)
-    sql = build_search_query(keyword, offset)
+    sql, params = build_search_query(keyword, offset)
 
-    results = Database.execute(sql)
+    results = Database.execute(sql, params)
     results.map { |result| User.new(result) }
   end
 
@@ -98,29 +87,23 @@ class UserRegistry
     (page - 1) * DEFAULT_PAGE_SIZE
   end
 
-  def self.build_search_condition_query(keyword)
-    if keyword.nil? || keyword.empty?
-      ''
-    else
-      format(
-        "WHERE name LIKE '%%%<keyword>s%%' OR email LIKE '%%%<keyword>s%%' ",
-        keyword:
-      )
-    end
-  end
-
   def self.build_search_query(keyword, offset)
-    search_condition_query = build_search_condition_query(keyword)
+    params = []
+    where_clause = ''
 
-    format(
-      'SELECT * FROM users %<search_condition_query>sORDER BY created_at DESC LIMIT %<limit>s OFFSET %<offset>s',
-      search_condition_query:,
-      limit: DEFAULT_PAGE_SIZE,
-      offset:
-    )
+    unless keyword.nil? || keyword.empty?
+      where_clause = 'WHERE name LIKE ? OR email LIKE ? '
+      params = ["%#{keyword}%", "%#{keyword}%"]
+    end
+
+    sql = "SELECT * FROM users #{where_clause}ORDER BY created_at DESC LIMIT ? OFFSET ?"
+    params << DEFAULT_PAGE_SIZE
+    params << offset
+
+    [sql, params]
   end
 
-  private_class_method :calculate_pagination_offset, :build_search_condition_query, :build_search_query
+  private_class_method :calculate_pagination_offset, :build_search_query
 end
 
 class UserService
