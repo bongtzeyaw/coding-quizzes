@@ -88,17 +88,17 @@ class UserRegistry
   end
 
   def self.build_search_query(keyword, offset)
-    params = []
-    where_clause = ''
+    base_query = 'SELECT * FROM users'
+    order_by_query = 'ORDER BY created_at DESC LIMIT ? OFFSET ?'
+    order_by_params = [DEFAULT_PAGE_SIZE, offset]
 
-    unless keyword.nil? || keyword.empty?
-      where_clause = 'WHERE name LIKE ? OR email LIKE ? '
-      params = ["%#{keyword}%", "%#{keyword}%"]
+    if keyword.nil? || keyword.empty?
+      sql = "#{base_query} #{order_by_query}"
+      params = order_by_params
+    else
+      sql = "#{base_query} WHERE name LIKE ? OR email LIKE ? #{order_by_query}"
+      params = ["%#{keyword}%", "%#{keyword}%"] + order_by_params
     end
-
-    sql = "SELECT * FROM users #{where_clause}ORDER BY created_at DESC LIMIT ? OFFSET ?"
-    params << DEFAULT_PAGE_SIZE
-    params << offset
 
     [sql, params]
   end
