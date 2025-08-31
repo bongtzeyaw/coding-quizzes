@@ -50,45 +50,40 @@ class FileValidator
   end
 end
 
-class FileProcessor
-  def process_csv(file_path)
-    validation_result = FileValidator.new(file_path).validate
-    return validation_result.info unless validation_result.success?
+class CSVFileProcessor
+  def initialize(file_path)
+    @file_path = file_path
+    @results = []
+    @errors = []
+  end
 
-    return 'Error: File not found' unless File.exist?(file_path)
+  def process
+    lines = read_lines
+    header_columns = extract_header_columns(lines)
 
-    lines = []
-    File.open(file_path, 'r') do |file|
-      file.each_line do |line|
-        lines << line.strip
-      end
-    end
+    header_offset = 1
+    lines.drop(header_offset).each.with_index(header_offset) do |line, index|
+      line_number = index + 1
 
-    header = lines[0].split(',')
+      columns = line.split(',')
 
-    results = []
-    errors = []
-
-    for i in 1..lines.length - 1
-      columns = lines[i].split(',')
-
-      if columns.length != header.length
-        errors << "Line #{i + 1}: Column count mismatch"
+      if columns.length != header_columns.length
+        @errors << "Line #{line_number}: Column count mismatch"
         next
       end
 
       row = {}
-      for j in 0..header.length - 1
-        row[header[j]] = columns[j]
+      for j in 0..header_columns.length - 1
+        row[header_columns[j]] = columns[j]
       end
 
       if row['email'] && !row['email'].match(/\A[\w+\-.]+@[a-z\d-]+(\.[a-z\d-]+)*\.[a-z]+\z/i)
-        errors << "Line #{i + 1}: Invalid email format"
+        @errors << "Line #{line_number}: Invalid email format"
         next
       end
 
       if row['age'] && row['age'].to_i < 0
-        errors << "Line #{i + 1}: Invalid age"
+        @errors << "Line #{line_number}: Invalid age"
         next
       end
 
@@ -98,21 +93,45 @@ class FileProcessor
         begin
           row['created_at'] = Time.parse(row['created_at']).strftime('%Y-%m-%d')
         rescue StandardError
-          errors << "Line #{i + 1}: Invalid date format"
+          @errors << "Line #{line_number}: Invalid date format"
           next
         end
       end
-
-      results << row
+      @results << row
     end
 
+    summary
+  end
+
+  private
+
+  def read_lines
+    File.readlines(@file_path).map(&:strip)
+  end
+
+  def extract_header_columns(lines)
+    lines[0].split(',')
+  end
+
+  def summary
     {
       success: true,
-      data: results,
-      errors: errors,
-      total_lines: lines.length - 1,
-      processed: results.length,
-      failed: errors.length
+      data: @results,
+      errors: @errors,
+      total_lines: @results.length + @errors.length,
+      processed: @results.length,
+      failed: @errors.length
     }
+  end
+end
+
+class FileProcessor
+  def process_csv(file_path)
+    validation_result = FileValidator.new(file_path).validate
+    return validation_result.info unless validation_result.success?
+
+    return 'Error: File not found' unless File.exist?(file_path)
+
+    CSVFileProcessor.new(file_path).process
   end
 end
