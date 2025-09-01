@@ -41,7 +41,7 @@ class TestUserService < Minitest::Test
   def test_search_users_with_keyword
     mock_db = Minitest::Mock.new
     mock_db.expect(:execute, [{'id' => 1, 'name' => 'John Doe', 'email' => 'john@example.com'}], ['SELECT * FROM users WHERE name LIKE ? OR email LIKE ? ORDER BY created_at DESC LIMIT ? OFFSET ?', ['%john%', '%john%', 20, 0]])
-    mock_db.expect(:execute, [{'count' => 10}], ['SELECT COUNT(*) as count FROM posts WHERE user_id = ?', [1]])
+    mock_db.expect(:execute, [{'user_id' => 1, 'count' => 10}], ['SELECT user_id, COUNT(*) as count FROM posts WHERE user_id IN (?) GROUP BY user_id', [1]])
 
     Database.stub :execute, ->(sql, params) { mock_db.execute(sql, params) } do
       users = @user_service.search_users('john')
@@ -55,7 +55,7 @@ class TestUserService < Minitest::Test
   def test_search_users_no_keyword
     mock_db = Minitest::Mock.new
     mock_db.expect(:execute, [{'id' => 2, 'name' => 'Jane Smith', 'email' => 'jane@example.com'}], ['SELECT * FROM users ORDER BY created_at DESC LIMIT ? OFFSET ?', [20, 0]])
-    mock_db.expect(:execute, [{'count' => 7}], ['SELECT COUNT(*) as count FROM posts WHERE user_id = ?', [2]])
+    mock_db.expect(:execute, [{'user_id' => 2, 'count' => 7}], ['SELECT user_id, COUNT(*) as count FROM posts WHERE user_id IN (?) GROUP BY user_id', [2]])
 
     Database.stub :execute, ->(sql, params) { mock_db.execute(sql, params) } do
       users = @user_service.search_users(nil)
@@ -69,13 +69,38 @@ class TestUserService < Minitest::Test
   def test_search_users_pagination
     mock_db = Minitest::Mock.new
     mock_db.expect(:execute, [{'id' => 3, 'name' => 'Alice', 'email' => 'alice@example.com'}], ['SELECT * FROM users WHERE name LIKE ? OR email LIKE ? ORDER BY created_at DESC LIMIT ? OFFSET ?', ['%a%', '%a%', 20, 20]])
-    mock_db.expect(:execute, [{'count' => 2}], ['SELECT COUNT(*) as count FROM posts WHERE user_id = ?', [3]])
+    mock_db.expect(:execute, [{'user_id' => 3, 'count' => 2}], ['SELECT user_id, COUNT(*) as count FROM posts WHERE user_id IN (?) GROUP BY user_id', [3]])
 
     Database.stub :execute, ->(sql, params) { mock_db.execute(sql, params) } do
       users = @user_service.search_users('a', 2)
       assert_equal 1, users.length
       assert_equal 'Alice', users[0][:name]
       assert_equal 2, users[0][:posts_count]
+    end
+    mock_db.verify
+  end
+  
+  def test_search_users_multiple_results
+    mock_db = Minitest::Mock.new
+    mock_users_data = [
+      {'id' => 1, 'name' => 'John Doe', 'email' => 'john@example.com'},
+      {'id' => 2, 'name' => 'Jane Smith', 'email' => 'jane@example.com'},
+    ]
+    mock_db.expect(:execute, mock_users_data, ['SELECT * FROM users WHERE name LIKE ? OR email LIKE ? ORDER BY created_at DESC LIMIT ? OFFSET ?', ['%o%', '%o%', 20, 0]])
+
+    mock_counts_data = [
+      {'user_id' => 1, 'count' => 10},
+      {'user_id' => 2, 'count' => 7},
+    ]
+    mock_db.expect(:execute, mock_counts_data, ['SELECT user_id, COUNT(*) as count FROM posts WHERE user_id IN (?, ?) GROUP BY user_id', [1, 2]])
+
+    Database.stub :execute, ->(sql, params) { mock_db.execute(sql, params) } do
+      users = @user_service.search_users('o')
+      assert_equal 2, users.length
+      assert_equal 'John Doe', users[0][:name]
+      assert_equal 10, users[0][:posts_count]
+      assert_equal 'Jane Smith', users[1][:name]
+      assert_equal 7, users[1][:posts_count]
     end
     mock_db.verify
   end

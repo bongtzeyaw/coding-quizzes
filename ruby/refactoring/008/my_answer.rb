@@ -83,6 +83,16 @@ class UserRegistry
     results.map { |result| User.new(result) }
   end
 
+  def self.fetch_posts_counts(user_ids)
+    return {} if user_ids.empty?
+
+    placeholders = (['?'] * user_ids.size).join(', ')
+    sql = "SELECT user_id, COUNT(*) as count FROM posts WHERE user_id IN (#{placeholders}) GROUP BY user_id"
+
+    results = Database.execute(sql, user_ids)
+    transform_results_to_hash(results)
+  end
+
   def self.calculate_pagination_offset(page)
     (page - 1) * DEFAULT_PAGE_SIZE
   end
@@ -103,7 +113,11 @@ class UserRegistry
     [sql, params]
   end
 
-  private_class_method :calculate_pagination_offset, :build_search_query
+  def self.transform_results_to_hash(results)
+    results.map { |row| [row['user_id'], row['count']] }.to_h
+  end
+
+  private_class_method :calculate_pagination_offset, :build_search_query, :transform_results_to_hash
 end
 
 class UserPresenter
@@ -123,12 +137,12 @@ class UserPresenter
     }
   end
 
-  def summarised_info
+  def summarised_info_with_preloaded_posts_counts(posts_counts_map)
     {
       id: @user.id,
       name: @user.name,
       email: @user.email,
-      posts_count: @user.posts_count
+      posts_count: posts_counts_map.fetch(@user.id, 0)
     }
   end
 end
@@ -143,6 +157,12 @@ class UserService
 
   def search_users(keyword, page = 1)
     users = UserRegistry.search_by_name_or_email(keyword:, page:)
-    users.map { |user| UserPresenter.new(user).summarised_info }
+
+    user_ids = users.map(&:id)
+    posts_counts_map = UserRegistry.fetch_posts_counts(user_ids)
+
+    users.map do |user|
+      UserPresenter.new(user).summarised_info_with_preloaded_posts_counts(posts_counts_map)
+    end
   end
 end
