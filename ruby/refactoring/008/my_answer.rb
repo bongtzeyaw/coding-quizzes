@@ -64,60 +64,62 @@ end
 class UserRegistry
   DEFAULT_PAGE_SIZE = 20
 
-  def self.find_by(id:)
-    result = Database.execute(
-      'SELECT * FROM users WHERE id = ?',
-      [id]
-    ).first
+  class << self
+    def find_by(id:)
+      result = Database.execute(
+        'SELECT * FROM users WHERE id = ?',
+        [id]
+      ).first
 
-    return nil unless result
+      return nil unless result
 
-    User.new(result)
-  end
-
-  def self.search_by_name_or_email(keyword:, page:)
-    offset = calculate_pagination_offset(page)
-    sql, params = build_search_query(keyword, offset)
-
-    results = Database.execute(sql, params)
-    results.map { |result| User.new(result) }
-  end
-
-  def self.fetch_posts_counts(user_ids)
-    return {} if user_ids.empty?
-
-    placeholders = (['?'] * user_ids.size).join(', ')
-    sql = "SELECT user_id, COUNT(*) as count FROM posts WHERE user_id IN (#{placeholders}) GROUP BY user_id"
-
-    results = Database.execute(sql, user_ids)
-    transform_results_to_hash(results)
-  end
-
-  def self.calculate_pagination_offset(page)
-    (page - 1) * DEFAULT_PAGE_SIZE
-  end
-
-  def self.build_search_query(keyword, offset)
-    base_query = 'SELECT * FROM users'
-    order_by_query = 'ORDER BY created_at DESC LIMIT ? OFFSET ?'
-    order_by_params = [DEFAULT_PAGE_SIZE, offset]
-
-    if keyword.nil? || keyword.empty?
-      sql = "#{base_query} #{order_by_query}"
-      params = order_by_params
-    else
-      sql = "#{base_query} WHERE name LIKE ? OR email LIKE ? #{order_by_query}"
-      params = ["%#{keyword}%", "%#{keyword}%"] + order_by_params
+      User.new(result)
     end
 
-    [sql, params]
-  end
+    def search_by_name_or_email(keyword:, page:)
+      offset = calculate_pagination_offset(page)
+      sql, params = build_search_query(keyword, offset)
 
-  def self.transform_results_to_hash(results)
-    results.map { |row| [row['user_id'], row['count']] }.to_h
-  end
+      results = Database.execute(sql, params)
+      results.map { |result| User.new(result) }
+    end
 
-  private_class_method :calculate_pagination_offset, :build_search_query, :transform_results_to_hash
+    def fetch_posts_counts(user_ids)
+      return {} if user_ids.empty?
+
+      placeholders = (['?'] * user_ids.size).join(', ')
+      sql = "SELECT user_id, COUNT(*) as count FROM posts WHERE user_id IN (#{placeholders}) GROUP BY user_id"
+
+      results = Database.execute(sql, user_ids)
+      transform_results_to_hash(results)
+    end
+
+    private
+
+    def calculate_pagination_offset(page)
+      (page - 1) * DEFAULT_PAGE_SIZE
+    end
+
+    def build_search_query(keyword, offset)
+      base_query = 'SELECT * FROM users'
+      order_by_query = 'ORDER BY created_at DESC LIMIT ? OFFSET ?'
+      order_by_params = [DEFAULT_PAGE_SIZE, offset]
+
+      if keyword.nil? || keyword.empty?
+        sql = "#{base_query} #{order_by_query}"
+        params = order_by_params
+      else
+        sql = "#{base_query} WHERE name LIKE ? OR email LIKE ? #{order_by_query}"
+        params = ["%#{keyword}%", "%#{keyword}%"] + order_by_params
+      end
+
+      [sql, params]
+    end
+
+    def transform_results_to_hash(results)
+      results.map { |row| [row['user_id'], row['count']] }.to_h
+    end
+  end
 end
 
 class UserPresenter
