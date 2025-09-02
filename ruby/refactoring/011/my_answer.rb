@@ -67,54 +67,56 @@ class CacheManager
   end
 end
 
+class ThumbnailGenerator
+  class << self
+    def generate_thumbnail(image_path:, width:, height:)
+      original = load_image(image_path)
+      resize_applicable?(width, height) ? resize_image(original, width, height) : original
+    end
+
+    private
+
+    def load_image(path)
+      "image_data_#{path}"
+    end
+
+    def resize_applicable?(width, height)
+      width && height
+    end
+
+    def resize_image(image, width, height)
+      "resized_#{image}_#{width}x#{height}"
+    end
+  end
+end
+
 class ImageProcessor
   def get_thumbnail(image_path, width, height)
     cache_key = CacheManager.build_image_cache_key(image_path:, width:, height:)
 
     CacheManager.with_caching(cache_key) do
-      original = load_image(image_path)
-
-      resized = if width && height
-                  resize_image(original, width, height)
-                else
-                  original
-                end
-
-      resized
+      ThumbnailGenerator.generate_thumbnail(image_path:, width:, height:)
     end
   end
 
   def get_multiple_thumbnails(image_paths, sizes)
-    results = {}
+    image_paths.map do |image_path|
+      [
+        image_path,
+        sizes.map do |size|
+          width = size[:width]
+          height = size[:height]
 
-    for i in 0..image_paths.length - 1
-      image_path = image_paths[i]
-      results[image_path] = {}
-
-      for j in 0..sizes.length - 1
-        size = sizes[j]
-        width = size[:width]
-        height = size[:height]
-
-        thumbnail = get_thumbnail(image_path, width, height)
-        results[image_path]["#{width}x#{height}"] = thumbnail
-      end
-    end
-
-    results
+          [
+            "#{width}x#{height}",
+            get_thumbnail(image_path, width, height)
+          ]
+        end.to_h
+      ]
+    end.to_h
   end
 
   def clean_old_cache
     CacheManager.clean_expired_cache
-  end
-
-  private
-
-  def load_image(path)
-    "image_data_#{path}"
-  end
-
-  def resize_image(image, width, height)
-    "resized_#{image}_#{width}x#{height}"
   end
 end
