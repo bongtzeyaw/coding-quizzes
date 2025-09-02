@@ -1,27 +1,87 @@
-class ImageProcessor
-  def get_thumbnail(image_path, width, height)
-    cache_key = "#{image_path}_#{width}x#{height}"
-    cached = nil
+# frozen_string_literal: true
 
-    if File.exist?("/tmp/cache/#{cache_key}")
-      cache_time = File.mtime("/tmp/cache/#{cache_key}")
-      cached = File.read("/tmp/cache/#{cache_key}") if Time.now - cache_time < 3600
+class CacheManager
+  CACHE_VALIDITY_PERIOD = 1 * 60 * 60
+  CACHE_EXPIRATION_PERIOD = 24 * 60 * 60
+  CACHE_DIR = '/tmp/cache'
+
+  class << self
+    def build_image_cache_key(image_path:, width:, height:)
+      "#{image_path}_#{width}x#{height}"
     end
 
-    return cached if cached
+    def with_caching(key)
+      cached_value = find_by_cache_key(key)
+      return cached_value if cached_value
 
-    original = load_image(image_path)
+      value = yield
+      create_cache_entry(key, value)
+      value
+    end
 
-    resized = if width && height
-                resize_image(original, width, height)
-              else
-                original
-              end
+    def clean_expired_cache
+      return unless Dir.exist?(CACHE_DIR)
 
-    Dir.mkdir('/tmp/cache') unless Dir.exist?('/tmp/cache')
-    File.write("/tmp/cache/#{cache_key}", resized)
+      expired_file_paths.each { |file_path| delete_file(file_path) }
+    end
 
-    resized
+    private
+
+    def cache_file_path(key)
+      File.join(CACHE_DIR, key)
+    end
+
+    def cache_valid?(file_path)
+      Time.now - File.mtime(file_path) < CACHE_VALIDITY_PERIOD
+    end
+
+    def cache_expired?(file_path)
+      Time.now - File.mtime(file_path) > CACHE_EXPIRATION_PERIOD
+    end
+
+    def find_by_cache_key(key)
+      file_path = cache_file_path(key)
+
+      return nil unless File.exist?(file_path)
+      return nil unless cache_valid?(file_path)
+
+      File.read(file_path)
+    end
+
+    def create_cache_entry(key, value)
+      file_path = cache_file_path(key)
+
+      Dir.mkdir(CACHE_DIR) unless Dir.exist?(CACHE_DIR)
+      File.write(file_path, value)
+    end
+
+    def expired_file_paths
+      Dir.glob(File.join(CACHE_DIR, '*')).filter do |file_path|
+        File.file?(file_path) && cache_expired?(file_path)
+      end
+    end
+
+    def delete_file(file_path)
+      File.delete(file_path)
+    end
+  end
+end
+
+class ImageProcessor
+  def get_thumbnail(image_path, width, height)
+    cache_key = CacheManager.build_image_cache_key(image_path:, width:, height:)
+
+    CacheManager.with_caching(cache_key) do
+      original = load_image(image_path)
+
+      resized = if width && height
+                  resize_image(original, width, height)
+                else
+                  original
+                end
+
+      resized
+    end
   end
 
   def get_multiple_thumbnails(image_paths, sizes)
@@ -45,16 +105,7 @@ class ImageProcessor
   end
 
   def clean_old_cache
-    return unless Dir.exist?('/tmp/cache')
-
-    Dir.foreach('/tmp/cache') do |file|
-      next if ['.', '..'].include?(file)
-
-      file_path = "/tmp/cache/#{file}"
-      file_time = File.mtime(file_path)
-
-      File.delete(file_path) if Time.now - file_time > 86_400
-    end
+    CacheManager.clean_expired_cache
   end
 
   private
