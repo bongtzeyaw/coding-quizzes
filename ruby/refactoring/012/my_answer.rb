@@ -67,6 +67,62 @@ class AccountLockManager
   end
 end
 
+class SessionManager
+  class << self
+    SESSION_DURATION = 24 * 60 * 60 # 24時間
+
+    def create_session(user)
+      token = generate_token
+
+      session = Session.new
+      session.user_id = user.id
+      session.token = token
+      session.expires_at = Time.now + SESSION_DURATION
+      session.save
+
+      token
+    end
+
+    def destroy_session(token)
+      session = Session.find_by(token: token)
+
+      if session
+        session.destroy
+        { success: true }
+      else
+        { success: false, error: 'Invalid session' }
+      end
+    end
+
+    def verify_token(token)
+      session = Session.find_by(token: token)
+      return { valid: false } unless session
+
+      if session_expired?(session)
+        session.destroy
+        { valid: false }
+      else
+        { valid: true, user_id: session.user_id }
+      end
+    end
+
+    private
+
+    def generate_token
+      token = ''
+      chars = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'
+      32.times do
+        token += chars[rand(chars.length)]
+      end
+      token
+    end
+
+    def session_expired?(session)
+      Time.now > session.expires_at
+    end
+  end
+end
+
 class AuthenticationService
   def login(username, password)
     user = User.find_by(username: username)
@@ -81,42 +137,17 @@ class AuthenticationService
 
     record_login(user)
 
-    token = ''
-    chars = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'
-    32.times do
-      token += chars[rand(chars.length)]
-    end
-
-    session = Session.new
-    session.user_id = user.id
-    session.token = token
-    session.expires_at = Time.now + 86_400
-    session.save
+    token = SessionManager.create_session(user)
 
     { success: true, token: token, user: user }
   end
 
   def logout(token)
-    session = Session.find_by(token: token)
-    if session
-      session.destroy
-      { success: true }
-    else
-      { success: false, error: 'Invalid session' }
-    end
+    SessionManager.destroy_session(token)
   end
 
   def verify_token(token)
-    session = Session.find_by(token: token)
-
-    return { valid: false } if session.nil?
-
-    if Time.now > session.expires_at
-      session.destroy
-      return { valid: false }
-    end
-
-    { valid: true, user_id: session.user_id }
+    SessionManager.verify_token(token)
   end
 
   private
