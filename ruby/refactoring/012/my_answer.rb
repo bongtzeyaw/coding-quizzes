@@ -1,5 +1,8 @@
 # frozen_string_literal: true
 
+require 'active_support/security_utils'
+require 'securerandom'
+
 class AccountLockManager
   LOCK_COOLDOWN_PERIOD = 30 * 60 # 30分
   LOCK_TRIGGER_FAILED_ATTEMPTS = 5
@@ -67,6 +70,13 @@ class AccountLockManager
   end
 end
 
+class PasswordVerifier
+  def self.verify(user, password)
+    ActiveSupport::SecurityUtils.secure_compare(user.password, password)
+    # If password hashing is implemented, do: ActiveSupport::SecurityUtils.secure_compare(user.password_digest, Digest::SHA256.hexdigest(password))
+  end
+end
+
 class SessionManager
   class << self
     SESSION_DURATION = 24 * 60 * 60 # 24時間
@@ -109,12 +119,7 @@ class SessionManager
     private
 
     def generate_token
-      token = ''
-      chars = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'
-      32.times do
-        token += chars[rand(chars.length)]
-      end
-      token
+      SecureRandom.urlsafe_base64(24)
     end
 
     def session_expired?(session)
@@ -130,7 +135,7 @@ class AuthenticationService
 
     account_lock_manager = AccountLockManager.new(user)
 
-    return account_lock_manager.handle_failed_attempt unless password_matches?(user.password, password)
+    return account_lock_manager.handle_failed_attempt unless PasswordVerifier.verify(user, password)
 
     result = account_lock_manager.handle_successful_attempt
     return result unless result[:success]
@@ -151,10 +156,6 @@ class AuthenticationService
   end
 
   private
-
-  def password_matches?(user_password, password)
-    user_password == password
-  end
 
   def record_login(user)
     user.last_login_at = Time.now
