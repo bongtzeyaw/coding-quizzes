@@ -71,7 +71,7 @@ class AccountLockManager
 end
 
 class PasswordVerifier
-  def self.verify(user, password)
+  def self.verify(user:, password:)
     ActiveSupport::SecurityUtils.secure_compare(user.password, password)
     # If password hashing is implemented, do: ActiveSupport::SecurityUtils.secure_compare(user.password_digest, Digest::SHA256.hexdigest(password))
   end
@@ -129,36 +129,38 @@ class SessionManager
 end
 
 class AuthenticationService
-  def login(username, password)
-    user = User.find_by(username: username)
-    return { success: false, error: 'Invalid credentials' } if user.nil?
+  class << self
+    def login(username:, password:)
+      user = User.find_by(username:)
+      return { success: false, error: 'Invalid credentials' } if user.nil?
 
-    account_lock_manager = AccountLockManager.new(user)
+      account_lock_manager = AccountLockManager.new(user)
 
-    return account_lock_manager.handle_failed_attempt unless PasswordVerifier.verify(user, password)
+      return account_lock_manager.handle_failed_attempt unless PasswordVerifier.verify(user:, password:)
 
-    result = account_lock_manager.handle_successful_attempt
-    return result unless result[:success]
+      result = account_lock_manager.handle_successful_attempt
+      return result unless result[:success]
 
-    record_login(user)
+      record_login(user)
 
-    token = SessionManager.create_session(user)
+      token = SessionManager.create_session(user)
 
-    { success: true, token: token, user: user }
-  end
+      { success: true, token:, user: }
+    end
 
-  def logout(token)
-    SessionManager.destroy_session(token)
-  end
+    def logout(token)
+      SessionManager.destroy_session(token)
+    end
 
-  def verify_token(token)
-    SessionManager.verify_token(token)
-  end
+    def verify_token(token)
+      SessionManager.verify_token(token)
+    end
 
-  private
+    private
 
-  def record_login(user)
-    user.last_login_at = Time.now
-    user.save
+    def record_login(user)
+      user.last_login_at = Time.now
+      user.save
+    end
   end
 end

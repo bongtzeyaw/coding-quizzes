@@ -50,34 +50,33 @@ end
 
 class AuthenticationServiceTest < Minitest::Test
   def setup
-    @service = AuthenticationService.new
     @user = User.new(id: 1, username: 'testuser', password: 'password')
     User.add(@user)
   end
 
   def test_login_success
-    result = @service.login('testuser', 'password')
+    result = AuthenticationService.login(username: 'testuser', password: 'password')
     assert result[:success]
     refute_nil result[:token]
     assert_equal @user, result[:user]
   end
 
   def test_login_invalid_username
-    result = @service.login('unknown', 'password')
+    result = AuthenticationService.login(username: 'unknown', password: 'password')
     refute result[:success]
     assert_equal 'Invalid credentials', result[:error]
   end
 
   def test_login_invalid_password
-    result = @service.login('testuser', 'wrong')
+    result = AuthenticationService.login(username: 'testuser', password: 'wrong')
     refute result[:success]
     assert_equal 'Invalid credentials', result[:error]
     assert_equal 1, @user.failed_attempts
   end
 
   def test_account_locks_after_five_failed_attempts
-    5.times { @service.login('testuser', 'wrong') }
-    result = @service.login('testuser', 'wrong')
+    5.times { AuthenticationService.login(username: 'testuser', password: 'wrong') }
+    result = AuthenticationService.login(username: 'testuser', password: 'wrong')
     refute result[:success]
     assert_equal 'Account locked', result[:error]
     assert @user.locked
@@ -86,7 +85,7 @@ class AuthenticationServiceTest < Minitest::Test
   def test_locked_account_login_within_30_minutes
     @user.locked = true
     @user.locked_at = Time.now
-    result = @service.login('testuser', 'password')
+    result = AuthenticationService.login(username: 'testuser', password: 'password')
     refute result[:success]
     assert_equal 'Account locked', result[:error]
   end
@@ -94,46 +93,46 @@ class AuthenticationServiceTest < Minitest::Test
   def test_locked_account_login_after_30_minutes
     @user.locked = true
     @user.locked_at = Time.now - 1900
-    result = @service.login('testuser', 'password')
+    result = AuthenticationService.login(username: 'testuser', password: 'password')
     assert result[:success]
     assert_equal @user, result[:user]
     refute @user.locked
   end
 
   def test_logout_success
-    login_result = @service.login('testuser', 'password')
+    login_result = AuthenticationService.login(username: 'testuser', password: 'password')
     token = login_result[:token]
-    result = @service.logout(token)
+    result = AuthenticationService.logout(token)
     assert result[:success]
     assert_nil Session.find_by(token: token)
   end
 
   def test_logout_invalid_token
-    result = @service.logout('badtoken')
+    result = AuthenticationService.logout('badtoken')
     refute result[:success]
     assert_equal 'Invalid session', result[:error]
   end
 
   def test_verify_token_success
-    login_result = @service.login('testuser', 'password')
+    login_result = AuthenticationService.login(username: 'testuser', password: 'password')
     token = login_result[:token]
-    result = @service.verify_token(token)
+    result = AuthenticationService.verify_token(token)
     assert result[:valid]
     assert_equal @user.id, result[:user_id]
   end
 
   def test_verify_token_expired
-    login_result = @service.login('testuser', 'password')
+    login_result = AuthenticationService.login(username: 'testuser', password: 'password')
     token = login_result[:token]
     session = Session.find_by(token: token)
     session.expires_at = Time.now - 10
-    result = @service.verify_token(token)
+    result = AuthenticationService.verify_token(token)
     refute result[:valid]
     assert_nil Session.find_by(token: token)
   end
 
   def test_verify_token_invalid
-    result = @service.verify_token('badtoken')
+    result = AuthenticationService.verify_token('badtoken')
     refute result[:valid]
   end
 end
