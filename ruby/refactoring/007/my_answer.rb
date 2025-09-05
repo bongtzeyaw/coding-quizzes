@@ -41,7 +41,7 @@ class ItemCollection
     @items = items
   end
 
-  def can_add_item?(item)
+  def valid_for_addition?(item)
     item[:quantity].positive?
   end
 
@@ -57,7 +57,7 @@ class ItemCollection
     @items
   end
 
-  def can_remove_item?(item_id)
+  def valid_for_removal?(item_id)
     !find(item_id).nil?
   end
 
@@ -135,14 +135,14 @@ class ShoppingCart
   end
 
   def add_item(item)
-    return false unless @items_collection.can_add_item?(item)
+    return false unless @items_collection.valid_for_addition?(item)
 
     @items_collection.add_item!(item)
     true
   end
 
   def remove_item(item_id)
-    return false unless @items_collection.can_remove_item?(item_id)
+    return false unless @items_collection.valid_for_removal?(item_id)
 
     @items_collection.remove_item!(item_id)
     true
