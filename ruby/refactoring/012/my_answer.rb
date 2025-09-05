@@ -71,9 +71,11 @@ class AccountLockManager
 end
 
 class PasswordVerifier
-  def self.verify(user:, password:)
-    ActiveSupport::SecurityUtils.secure_compare(user.password, password)
-    # If password hashing is implemented, do: ActiveSupport::SecurityUtils.secure_compare(user.password_digest, Digest::SHA256.hexdigest(password))
+  class << self
+    def verify(user:, password:)
+      ActiveSupport::SecurityUtils.secure_compare(user.password, password)
+      # If password hashing is implemented, do: ActiveSupport::SecurityUtils.secure_compare(user.password_digest, Digest::SHA256.hexdigest(password))
+    end
   end
 end
 
