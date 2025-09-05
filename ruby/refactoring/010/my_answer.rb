@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require 'uri'
+
 class OperationResult
   def initialize(success:)
     @success = success
@@ -90,7 +92,7 @@ class CSVRowColumnsValidator
 end
 
 class CSVRowDataValidator
-  VALID_EMAIL_FORMAT = /\A[\w+\-.]+@[a-z\d-]+(\.[a-z\d-]+)*\.[a-z]+\z/i
+  VALID_EMAIL_FORMAT = URI::MailTo::EMAIL_REGEXP
   VALID_CREATED_AT_FORMAT = '%Y-%m-%d'
 
   def initialize(row:, line_number:)
