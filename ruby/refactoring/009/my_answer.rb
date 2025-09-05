@@ -1,5 +1,52 @@
 # frozen_string_literal: true
 
+class EmailGenerator
+  class << self
+    def generate_order_confirmation_email(order)
+      {
+        to: order.customer_email,
+        subject: "Order Confirmation ##{order.id}",
+        body: build_order_confirmation_email(order)
+      }
+    end
+
+    def generate_points_obtention_notification_email(order, points)
+      {
+        to: order.customer_email,
+        subject: 'Points Earned!',
+        body: build_points_obtention_notification_email(points)
+      }
+    end
+
+    private
+
+    def order_details_text(order)
+      order.items.map do |item|
+        "- #{item[:product_name]} x#{item[:quantity]} = $#{item[:price] * item[:quantity]}\n"
+      end.join
+    end
+
+    def build_order_confirmation_email(order)
+      <<~BODY
+        Dear #{order.customer_name},
+
+        Your order ##{order.id} has been confirmed.
+
+        Order details:
+        #{order_details_text(order)}
+
+        Total: $#{order.total_amount}
+
+        Thank you for your purchase!
+      BODY
+    end
+
+    def build_points_obtention_notification_email(points)
+      "You've earned #{points} points from your recent purchase!"
+    end
+  end
+end
+
 class StockManagerClient
   class << self
     def check_stock_availability(order)
@@ -34,46 +81,11 @@ end
 class EmailServiceClient
   class << self
     def send_order_confirmation_email(order)
-      EmailService.send(
-        to: order.customer_email,
-        subject: "Order Confirmation ##{order.id}",
-        body: build_order_confirmation_email(order)
-      )
+      EmailService.send(EmailGenerator.generate_order_confirmation_email(order))
     end
 
     def send_points_obtention_notification_email(order, points)
-      EmailService.send(
-        to: order.customer_email,
-        subject: 'Points Earned!',
-        body: build_points_obtention_notification_email(points)
-      )
-    end
-
-    private
-
-    def order_details_text(order)
-      order.items.map do |item|
-        "- #{item[:product_name]} x#{item[:quantity]} = $#{item[:price] * item[:quantity]}\n"
-      end.join
-    end
-
-    def build_order_confirmation_email(order)
-      <<~BODY
-        Dear #{order.customer_name},
-
-        Your order ##{order.id} has been confirmed.
-
-        Order details:
-        #{order_details_text(order)}
-
-        Total: $#{order.total_amount}
-
-        Thank you for your purchase!
-      BODY
-    end
-
-    def build_points_obtention_notification_email(points)
-      "You've earned #{points} points from your recent purchase!"
+      EmailService.send(EmailGenerator.generate_points_obtention_notification_email(order, points))
     end
   end
 end
