@@ -47,6 +47,14 @@ class EmailGenerator
   end
 end
 
+class SlackNotificationMessageGenerator
+  class << self
+    def generate_order_confirmation_message(order)
+      "New order ##{order.id} from #{order.customer_name} - Total: $#{order.total_amount}"
+    end
+  end
+end
+
 class StockManagerClient
   class << self
     def check_stock(item)
@@ -76,13 +84,10 @@ end
 class SlackNotifierClient
   class << self
     def notify_order_confirmation(order)
-      SlackNotifier.notify('#sales', build_order_confirmation_slack_message(order))
-    end
-
-    private
-
-    def build_order_confirmation_slack_message(order)
-      "New order ##{order.id} from #{order.customer_name} - Total: $#{order.total_amount}"
+      SlackNotifier.notify(
+        '#sales',
+        SlackNotificationMessageGenerator.generate_order_confirmation_message(order)
+      )
     end
   end
 end
