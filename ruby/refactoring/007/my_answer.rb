@@ -85,7 +85,7 @@ class CheckoutTotalCalculator
     @coupon = coupon
   end
 
-  def calculate(items_collection:)
+  def calculate(items_collection)
     return 0 if items_collection.items.empty?
 
     subtotal = calculate_subtotal(items_collection)
@@ -162,7 +162,7 @@ class ShoppingCart
   end
 
   def calculate_total
-    @checkout_total_calculator.calculate(items_collection: @items_collection)
+    @checkout_total_calculator.calculate(@items_collection)
   end
 
   def get_total
