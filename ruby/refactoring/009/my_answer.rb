@@ -49,31 +49,14 @@ end
 
 class StockManagerClient
   class << self
-    def check_stock_availability(order)
-      order.items.each do |item|
-        stock = StockManager.check_stock(item[:product_id])
-
-        unless item_available?(item[:quantity], stock)
-          return {
-            success: false,
-            error: "Insufficient stock for #{item[:product_name]}"
-          }
-        end
-      end
-
-      { success: true }
+    def check_stock(item)
+      StockManager.check_stock(item[:product_id])
     end
 
     def reduce_stock(order)
       order.items.each do |item|
         StockManager.reduce_stock(item[:product_id], item[:quantity])
       end
-    end
-
-    private
-
-    def item_available?(requested_quantity, stock)
-      requested_quantity <= stock
     end
   end
 end
@@ -208,6 +191,33 @@ class EventBus
   end
 end
 
+class OrderValidator
+  def initialize(order)
+    @order = order
+  end
+
+  def validate
+    @order.items.each do |item|
+      stock = StockManagerClient.check_stock(item)
+
+      unless item_available?(item[:quantity], stock)
+        return {
+          success: false,
+          error: "Insufficient stock for #{item[:product_name]}"
+        }
+      end
+    end
+
+    { success: true }
+  end
+
+  private
+
+  def item_available?(requested_quantity, stock)
+    requested_quantity <= stock
+  end
+end
+
 class OrderProcessor
   def initialize
     @event_bus = EventBus.new
@@ -215,8 +225,10 @@ class OrderProcessor
   end
 
   def process_order(order)
-    stock_availability_result = StockManagerClient.check_stock_availability(order)
-    return stock_availability_result unless stock_availability_result[:success]
+    order_validator = OrderValidator.new(order)
+    order_validation_result = order_validator.validate
+
+    return order_validation_result unless order_validation_result[:success]
 
     confirm_order!(order)
     @event_bus.publish(:order_confirmed, order)
