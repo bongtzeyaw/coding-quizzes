@@ -93,29 +93,35 @@ class SlackNotifierClient
 end
 
 class CustomerServiceClient
-  def self.add_points(order, points)
-    CustomerService.add_points(order.customer_id, points)
+  class << self
+    def add_points(order, points)
+      CustomerService.add_points(order.customer_id, points)
+    end
   end
 end
 
 class AnalyticsClient
-  def self.track(order)
-    Analytics.track('order_completed', {
-                      order_id: order.id,
-                      customer_id: order.customer_id,
-                      total: order.total_amount,
-                      items_count: order.items.count
-                    })
+  class << self
+    def track(order)
+      Analytics.track('order_completed', {
+                        order_id: order.id,
+                        customer_id: order.customer_id,
+                        total: order.total_amount,
+                        items_count: order.items.count
+                      })
+    end
   end
 end
 
 class ShippingServiceClient
-  def self.create_shipment(order)
-    ShippingService.create_shipment({
-                                      order_id: order.id,
-                                      address: order.shipping_address,
-                                      items: order.items
-                                    })
+  class << self
+    def create_shipment(order)
+      ShippingService.create_shipment({
+                                        order_id: order.id,
+                                        address: order.shipping_address,
+                                        items: order.items
+                                      })
+    end
   end
 end
 
