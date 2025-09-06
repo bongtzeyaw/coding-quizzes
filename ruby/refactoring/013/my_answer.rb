@@ -265,8 +265,8 @@ class NotificationService
   end
 
   def send_bulk_notifications(user_ids, type, data)
-    for i in 0..user_ids.length - 1
-      send_notification(user_ids[i], type, data)
+    user_ids.each do |user_id|
+      send_notification(user_id, type, data)
     end
   end
 end
