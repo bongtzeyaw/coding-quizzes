@@ -1,15 +1,25 @@
 # frozen_string_literal: true
 
+class NotificationLogger
+  def self.log(user_id:, channel_type:, event:)
+    log = NotificationLog.new
+    log.user_id = user_id
+    log.type = channel_type
+    log.event = event
+    log.sent_at = Time.now
+    log.save
+  end
+end
+
 class NotificationChannel
   protected
 
   def log_notification(user:, data:)
-    log = NotificationLog.new
-    log.user_id = user.id
-    log.type = self.class::TYPE.to_s
-    log.event = data[:event]
-    log.sent_at = Time.now
-    log.save
+    NotificationLogger.log(
+      user_id: user.id,
+      channel_type: self.class::TYPE.to_s,
+      event: data[:event]
+    )
   end
 end
 
