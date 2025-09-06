@@ -124,7 +124,7 @@ class MessageTemplateDispatcher
     push: PushMessageTemplate
   }.freeze
 
-  def self.dispatch(channel_type:)
+  def self.dispatch(channel_type)
     template_class = TEMPLATES_BY_CHANNEL[channel_type.to_sym]
     raise ArgumentError, 'No template found for channel type' unless template_class
 
@@ -147,7 +147,7 @@ class NotificationChannel
   protected
 
   def message_template
-    MessageTemplateDispatcher.dispatch(channel_type: self.class::TYPE)
+    MessageTemplateDispatcher.dispatch(self.class::TYPE)
   end
 
   def log_notification(user:, data:)
@@ -255,7 +255,7 @@ class NotificationChannelDispatcher
 end
 
 class NotificationService
-  def send_notification(user_id, type, data)
+  def send_notification(user_id:, type:, data:)
     user = User.find(user_id)
 
     channel = NotificationChannelDispatcher.dispatch(type)
@@ -264,9 +264,9 @@ class NotificationService
     channel.notify(user:, data:)
   end
 
-  def send_bulk_notifications(user_ids, type, data)
+  def send_bulk_notifications(user_ids:, type:, data:)
     user_ids.each do |user_id|
-      send_notification(user_id, type, data)
+      send_notification(user_id:, type:, data:)
     end
   end
 end
