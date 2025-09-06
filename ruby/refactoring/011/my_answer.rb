@@ -32,14 +32,14 @@ class CacheManager
     end
 
     def cache_valid?(file_path)
-      Time.now - File.mtime(file_path) < CACHE_VALIDITY_PERIOD
+      Time.now.utc - File.mtime(file_path).utc < CACHE_VALIDITY_PERIOD
     rescue Errno::ENOENT, Errno::EACCES => e
       puts "Warning: Failed to check cache validity: #{e.message}"
       false
     end
 
     def cache_expired?(file_path)
-      Time.now - File.mtime(file_path) > CACHE_EXPIRATION_PERIOD
+      Time.now.utc - File.mtime(file_path).utc > CACHE_EXPIRATION_PERIOD
     rescue Errno::ENOENT, Errno::EACCES => e
       puts "Warning: Failed to check cache expiration: #{e.message}"
       false
