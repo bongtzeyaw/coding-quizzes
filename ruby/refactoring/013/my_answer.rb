@@ -1,5 +1,137 @@
 # frozen_string_literal: true
 
+class MessageTemplate
+  def build(data)
+    template = self.class::TEMPLATES[data[:event].to_sym]
+
+    raise ArgumentError, 'No template found for event' unless template
+    raise ArgumentError, 'Missing required data keys' unless required_data_keys_present?(template, data)
+
+    interpolate(template, data)
+  end
+
+  private
+
+  def required_data_keys_present?(template, data)
+    template.all? do |_field, text_detail|
+      keys = text_detail[:required_data_keys]
+      keys.nil? || (keys - data.keys).empty?
+    end
+  end
+
+  def interpolate(template, data)
+    template.transform_values do |text_detail|
+      if text_detail[:required_data_keys]
+        format(text_detail[:text], data.slice(*text_detail[:required_data_keys]))
+      else
+        text_detail[:text]
+      end
+    end
+  end
+end
+
+class EmailMessageTemplate < MessageTemplate
+  TEMPLATES = {
+    order_completed: {
+      subject: {
+        text: 'Order Completed!'
+      },
+      body: {
+        text: 'Your order #%<order_id>s has been completed.',
+        required_data_keys: [:order_id]
+      }
+    },
+    payment_received: {
+      subject: {
+        text: 'Payment Received'
+      },
+      body: {
+        text: "We've received your payment of $%<amount>s.",
+        required_data_keys: [:amount]
+      }
+    },
+    shipment_sent: {
+      subject: {
+        text: 'Your Order Has Shipped!'
+      },
+      body: {
+        text: 'Your order #%<order_id>s is on its way.',
+        required_data_keys: [:order_id]
+      }
+    }
+  }.freeze
+end
+
+class SmsMessageTemplate < MessageTemplate
+  TEMPLATES = {
+    order_completed: {
+      message: {
+        text: 'Order #%<order_id>s completed!',
+        required_data_keys: [:order_id]
+      }
+    },
+    payment_received: {
+      message: {
+        text: 'Payment of $%<amount>s received.',
+        required_data_keys: [:amount]
+      }
+    },
+    shipment_sent: {
+      message: {
+        text: 'Order #%<order_id>s shipped!',
+        required_data_keys: [:order_id]
+      }
+    }
+  }.freeze
+end
+
+class PushMessageTemplate < MessageTemplate
+  TEMPLATES = {
+    order_completed: {
+      title: {
+        text: 'Order Completed'
+      },
+      message: {
+        text: 'Your order #%<order_id>s is complete!',
+        required_data_keys: [:order_id]
+      }
+    },
+    payment_received: {
+      title: {
+        text: 'Payment Received'
+      },
+      message: {
+        text: '$%<amount>s payment confirmed',
+        required_data_keys: [:amount]
+      }
+    },
+    shipment_sent: {
+      title: {
+        text: 'Order Shipped'
+      },
+      message: {
+        text: 'Order #%<order_id>s is on the way!',
+        required_data_keys: [:order_id]
+      }
+    }
+  }.freeze
+end
+
+class MessageTemplateDispatcher
+  TEMPLATES_BY_CHANNEL = {
+    email: EmailMessageTemplate,
+    sms: SmsMessageTemplate,
+    push: PushMessageTemplate
+  }.freeze
+
+  def self.dispatch(channel_type:)
+    template_class = TEMPLATES_BY_CHANNEL[channel_type.to_sym]
+    raise ArgumentError, 'No template found for channel type' unless template_class
+
+    template_class.new
+  end
+end
+
 class NotificationLogger
   def self.log(user_id:, channel_type:, event:)
     log = NotificationLog.new
@@ -13,6 +145,10 @@ end
 
 class NotificationChannel
   protected
+
+  def message_template
+    MessageTemplateDispatcher.dispatch(channel_type: self.class::TYPE)
+  end
 
   def log_notification(user:, data:)
     NotificationLogger.log(
@@ -29,17 +165,9 @@ class EmailChannel < NotificationChannel
   def notify(user:, data:)
     return unless user_notifiable?(user)
 
-    subject, body =
-      case data[:event]
-      when 'order_completed'
-        ['Order Completed!', "Your order ##{data[:order_id]} has been completed."]
-      when 'payment_received'
-        ['Payment Received', "We've received your payment of $#{data[:amount]}."]
-      when 'shipment_sent'
-        ['Your Order Has Shipped!', "Your order ##{data[:order_id]} is on its way."]
-      end
+    template = message_template.build(data)
 
-    deliver(email: user.email, subject:, body:)
+    deliver(email: user.email, subject: template[:subject], body: template[:body])
     log_notification(user:, data:)
   end
 
@@ -64,17 +192,9 @@ class SmsChannel < NotificationChannel
   def notify(user:, data:)
     return unless user_notifiable?(user)
 
-    message =
-      case data[:event]
-      when 'order_completed'
-        "Order ##{data[:order_id]} completed!"
-      when 'payment_received'
-        "Payment of $#{data[:amount]} received."
-      when 'shipment_sent'
-        "Order ##{data[:order_id]} shipped!"
-      end
+    template = message_template.build(data)
 
-    deliver(phone: user.phone, message:)
+    deliver(phone: user.phone, message: template[:message])
     log_notification(user:, data:)
   end
 
@@ -98,17 +218,9 @@ class PushChannel < NotificationChannel
   def notify(user:, data:)
     return unless user_notifiable?(user)
 
-    title, message =
-      case data[:event]
-      when 'order_completed'
-        ['Order Completed', "Your order ##{data[:order_id]} is complete!"]
-      when 'payment_received'
-        ['Payment Received', "$#{data[:amount]} payment confirmed"]
-      when 'shipment_sent'
-        ['Order Shipped', "Order ##{data[:order_id]} is on the way!"]
-      end
+    template = message_template.build(data)
 
-    deliver(device_token: user.device_token, title:, message:)
+    deliver(device_token: user.device_token, title: template[:title], message: template[:message])
     log_notification(user:, data:)
   end
 
