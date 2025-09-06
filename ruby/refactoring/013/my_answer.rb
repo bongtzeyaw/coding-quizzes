@@ -1,79 +1,145 @@
+# frozen_string_literal: true
+
+class NotificationChannel
+  protected
+
+  def log_notification(user:, data:)
+    log = NotificationLog.new
+    log.user_id = user.id
+    log.type = self.class::TYPE.to_s
+    log.event = data[:event]
+    log.sent_at = Time.now
+    log.save
+  end
+end
+
+class EmailChannel < NotificationChannel
+  TYPE = :email
+
+  def notify(user:, data:)
+    return unless user_notifiable?(user)
+
+    subject, body =
+      case data[:event]
+      when 'order_completed'
+        ['Order Completed!', "Your order ##{data[:order_id]} has been completed."]
+      when 'payment_received'
+        ['Payment Received', "We've received your payment of $#{data[:amount]}."]
+      when 'shipment_sent'
+        ['Your Order Has Shipped!', "Your order ##{data[:order_id]} is on its way."]
+      end
+
+    deliver(email: user.email, subject:, body:)
+    log_notification(user:, data:)
+  end
+
+  private
+
+  def user_notifiable?(user)
+    user.email_enabled
+  end
+
+  def deliver(email:, subject:, body:)
+    EmailSender.send(
+      email,
+      subject,
+      body
+    )
+  end
+end
+
+class SmsChannel < NotificationChannel
+  TYPE = :sms
+
+  def notify(user:, data:)
+    return unless user_notifiable?(user)
+
+    message =
+      case data[:event]
+      when 'order_completed'
+        "Order ##{data[:order_id]} completed!"
+      when 'payment_received'
+        "Payment of $#{data[:amount]} received."
+      when 'shipment_sent'
+        "Order ##{data[:order_id]} shipped!"
+      end
+
+    deliver(phone: user.phone, message:)
+    log_notification(user:, data:)
+  end
+
+  private
+
+  def user_notifiable?(user)
+    user.sms_enabled && user.phone
+  end
+
+  def deliver(phone:, message:)
+    SmsSender.send(
+      phone,
+      message
+    )
+  end
+end
+
+class PushChannel < NotificationChannel
+  TYPE = :push
+
+  def notify(user:, data:)
+    return unless user_notifiable?(user)
+
+    title, message =
+      case data[:event]
+      when 'order_completed'
+        ['Order Completed', "Your order ##{data[:order_id]} is complete!"]
+      when 'payment_received'
+        ['Payment Received', "$#{data[:amount]} payment confirmed"]
+      when 'shipment_sent'
+        ['Order Shipped', "Order ##{data[:order_id]} is on the way!"]
+      end
+
+    deliver(device_token: user.device_token, title:, message:)
+    log_notification(user:, data:)
+  end
+
+  private
+
+  def user_notifiable?(user)
+    user.push_enabled && user.device_token
+  end
+
+  def deliver(device_token:, title:, message:)
+    PushNotifier.send(
+      device_token,
+      title,
+      message
+    )
+  end
+end
+
+class NotificationChannelDispatcher
+  CHANNELS = {
+    email: EmailChannel,
+    sms: SmsChannel,
+    push: PushChannel
+  }.freeze
+
+  def self.dispatch(type)
+    channel_class = CHANNELS[type.to_sym]
+    raise ArgumentError, 'Unknown channel type' unless channel_class
+
+    channel_class.new
+  end
+end
+
 class NotificationService
   def send_notification(user_id, type, data)
     user = User.find(user_id)
 
-    if type == 'email'
-      if user.email_enabled
-        subject = ''
-        body = ''
+    channel = NotificationChannelDispatcher.dispatch(type)
+    return unless channel
 
-        if data[:event] == 'order_completed'
-          subject = 'Order Completed!'
-          body = "Your order ##{data[:order_id]} has been completed."
-        elsif data[:event] == 'payment_received'
-          subject = 'Payment Received'
-          body = "We've received your payment of $#{data[:amount]}."
-        elsif data[:event] == 'shipment_sent'
-          subject = 'Your Order Has Shipped!'
-          body = "Your order ##{data[:order_id]} is on its way."
-        end
-
-        EmailSender.send(user.email, subject, body)
-
-        log = NotificationLog.new
-        log.user_id = user_id
-        log.type = 'email'
-        log.event = data[:event]
-        log.sent_at = Time.now
-        log.save
-      end
-    elsif type == 'sms'
-      if user.sms_enabled && user.phone
-        message = ''
-
-        if data[:event] == 'order_completed'
-          message = "Order ##{data[:order_id]} completed!"
-        elsif data[:event] == 'payment_received'
-          message = "Payment of $#{data[:amount]} received."
-        elsif data[:event] == 'shipment_sent'
-          message = "Order ##{data[:order_id]} shipped!"
-        end
-
-        SmsSender.send(user.phone, message)
-
-        log = NotificationLog.new
-        log.user_id = user_id
-        log.type = 'sms'
-        log.event = data[:event]
-        log.sent_at = Time.now
-        log.save
-      end
-    elsif type == 'push'
-      if user.push_enabled && user.device_token
-        title = ''
-        message = ''
-
-        if data[:event] == 'order_completed'
-          title = 'Order Completed'
-          message = "Your order ##{data[:order_id]} is complete!"
-        elsif data[:event] == 'payment_received'
-          title = 'Payment Received'
-          message = "$#{data[:amount]} payment confirmed"
-        elsif data[:event] == 'shipment_sent'
-          title = 'Order Shipped'
-          message = "Order ##{data[:order_id]} is on the way!"
-        end
-
-        PushNotifier.send(user.device_token, title, message)
-
-        log = NotificationLog.new
-        log.user_id = user_id
-        log.type = 'push'
-        log.event = data[:event]
-        log.sent_at = Time.now
-        log.save
-      end
-    end
+    channel.notify(user:, data:)
   end
 
   def send_bulk_notifications(user_ids, type, data)
