@@ -33,10 +33,16 @@ class CacheManager
 
     def cache_valid?(file_path)
       Time.now - File.mtime(file_path) < CACHE_VALIDITY_PERIOD
+    rescue Errno::ENOENT, Errno::EACCES => e
+      puts "Warning: Failed to check cache validity: #{e.message}"
+      false
     end
 
     def cache_expired?(file_path)
       Time.now - File.mtime(file_path) > CACHE_EXPIRATION_PERIOD
+    rescue Errno::ENOENT, Errno::EACCES => e
+      puts "Warning: Failed to check cache expiration: #{e.message}"
+      false
     end
 
     def find_by_cache_key(key)
@@ -46,6 +52,8 @@ class CacheManager
       return nil unless cache_valid?(file_path)
 
       File.read(file_path)
+    rescue Errno::ENOENT, Errno::EACCES, IOError, ArgumentError => e
+      puts "Warning: Failed to read from cache file: #{e.message}"
     end
 
     def create_cache_entry(key, value)
@@ -53,16 +61,23 @@ class CacheManager
 
       Dir.mkdir(CACHE_DIR) unless Dir.exist?(CACHE_DIR)
       File.write(file_path, value)
+    rescue Errno::EACCES, IOError => e
+      puts "Warning: Failed to write to cache file: #{e.message}"
     end
 
     def expired_file_paths
       Dir.glob(File.join(CACHE_DIR, '*')).filter do |file_path|
         File.file?(file_path) && cache_expired?(file_path)
       end
+    rescue Errno::ENOENT, Errno::EACCES => e
+      puts "Warning: Failed to list expired cache files: #{e.message}"
+      []
     end
 
     def delete_file(file_path)
       File.delete(file_path)
+    rescue Errno::EACCES, IOError => e
+      puts "Warning: Failed to delete file: #{e.message}"
     end
   end
 end
