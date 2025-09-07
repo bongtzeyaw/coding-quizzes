@@ -257,6 +257,7 @@ end
 class NotificationService
   def send_notification(user_id:, type:, data:)
     user = User.find(user_id)
+    return unless user
 
     channel = NotificationChannelDispatcher.dispatch(type)
     return unless channel
