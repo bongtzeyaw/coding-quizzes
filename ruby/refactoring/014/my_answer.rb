@@ -122,28 +122,57 @@ class CategoryBulkDiscount < Discount
   end
 end
 
+class PricingStrategy
+  MINIMUM_MARGIN_RATE = 1.1
+
+  def initialize(product, quantity, customer)
+    @product = product
+    @quantity = quantity
+    @customer = customer
+  end
+
+  def calculate_price
+    discounted_price = apply_discounts(base_price)
+    adjusted_discounted_price = ensure_min_price(discounted_price)
+    round_price(adjusted_discounted_price)
+  end
+
+  private
+
+  def base_price
+    @product.price * @quantity
+  end
+
+  def discounts
+    [
+      CategoryDiscount.new(@product.category, @quantity),
+      CustomerRankDiscount.new(@customer),
+      SeasonalDiscount.new(@product),
+      CategoryBulkDiscount.new(@product, @customer)
+    ]
+  end
+
+  def apply_discounts(price)
+    discounts.reduce(price) do |current_price, discount|
+      current_price * (1 - discount.rate)
+    end
+  end
+
+  def ensure_min_price(price)
+    min_price = @product.cost * MINIMUM_MARGIN_RATE
+    [price, min_price].max
+  end
+
+  def round_price(price)
+    (price * 100).round / 100.0
+  end
+end
+
 class PricingCalculator
   def calculate_price(product, quantity, customer)
-    base_price = product.price * quantity
+    return if product.nil? || quantity <= 0 || customer.nil?
 
-    discount = CategoryDiscount.new(product.category, quantity).rate
-
-    price_after_category_discount = base_price * (1 - discount)
-
-    customer_discount = CustomerRankDiscount.new(customer).rate
-
-    price_after_customer_discount = price_after_category_discount * (1 - customer_discount)
-
-    seasonal_discount = SeasonalDiscount.new(product).rate
-
-    price_after_customer_discount *= (1 - seasonal_discount)
-
-    category_bulk_discount = CategoryBulkDiscount.new(product, customer).rate
-    price_after_customer_discount *= (1 - category_bulk_discount)
-
-    min_price = product.cost * 1.1
-    price_after_customer_discount = min_price if price_after_customer_discount < min_price
-
-    (price_after_customer_discount * 100).round / 100.0
+    pricing_strategy = PricingStrategy.new(product, quantity, customer)
+    pricing_strategy.calculate_price
   end
 end
