@@ -1,0 +1,75 @@
+production:
+  database:
+    host: <%= ENV['DB_HOST'] || 'prod-db.example.com' %>
+    port: <%= (ENV['DB_PORT'] || 5432).to_i %>
+    database: <%= ENV['DB_NAME'] || 'myapp_production' %>
+    username: <%= ENV['DB_USER'] || 'app_user' %>
+    password: <%= ENV['DB_PASSWORD'] %>
+    pool: <%= (ENV['DB_POOL'] || 20).to_i %>
+    timeout: 5000
+  redis:
+    host: <%= ENV['REDIS_HOST'] || 'prod-redis.example.com' %>
+    port: <%= (ENV['REDIS_PORT'] || 6379).to_i %>
+    db: 0
+    password: <%= ENV['REDIS_PASSWORD'] %>
+  api:
+    payment_api: https://api.payment.com/v1
+    shipping_api: https://api.shipping.com/v2
+    notification_api: https://api.notification.com/v1
+
+staging:
+  database:
+    host: <%= ENV['DB_HOST'] || 'staging-db.example.com' %>
+    port: <%= (ENV['DB_PORT'] || 5432).to_i %>
+    database: <%= ENV['DB_NAME'] || 'myapp_staging' %>
+    username: <%= ENV['DB_USER'] || 'app_user' %>
+    password: <%= ENV['DB_PASSWORD'] %>
+    pool: <%= (ENV['DB_POOL'] || 10).to_i %>
+    timeout: 5000
+  redis:
+    host: <%= ENV['REDIS_HOST'] || 'staging-redis.example.com' %>
+    port: <%= (ENV['REDIS_PORT'] || 6379).to_i %>
+    db: 1
+    password: <%= ENV['REDIS_PASSWORD'] %>
+  api:
+    payment_api: https://staging-api.payment.com/v1
+    shipping_api: https://staging-api.shipping.com/v2
+    notification_api: https://staging-api.notification.com/v1
+
+test:
+  database:
+    host: localhost
+    port: 5432
+    database: myapp_test
+    username: test_user
+    password: test_password
+    pool: 5
+    timeout: 1000
+  redis:
+    host: <%= ENV['REDIS_HOST'] || 'localhost' %>
+    port: <%= (ENV['REDIS_PORT'] || 6379).to_i %>
+    db: 2
+    password:
+  api:
+    payment_api: <%= ENV['PAYMENT_API_URL'] || 'http://localhost:3001' %>
+    shipping_api: <%= ENV['SHIPPING_API_URL'] || 'http://localhost:3002' %>
+    notification_api: <%= ENV['NOTIFICATION_API_URL'] || 'http://localhost:3003' %>
+
+development:
+  database:
+    host: <%= ENV['DB_HOST'] || 'localhost' %>
+    port: <%= (ENV['DB_PORT'] || 5432).to_i %>
+    database: <%= ENV['DB_NAME'] || 'myapp_development' %>
+    username: <%= ENV['DB_USER'] || 'dev_user' %>
+    password: <%= ENV['DB_PASSWORD'] || 'dev_password' %>
+    pool: <%= (ENV['DB_POOL'] || 5).to_i %>
+    timeout: 5000
+  redis:
+    host: <%= ENV['REDIS_HOST'] || 'localhost' %>
+    port: <%= (ENV['REDIS_PORT'] || 6379).to_i %>
+    db: 2
+    password:
+  api:
+    payment_api: <%= ENV['PAYMENT_API_URL'] || 'http://localhost:3001' %>
+    shipping_api: <%= ENV['SHIPPING_API_URL'] || 'http://localhost:3002' %>
+    notification_api: <%= ENV['NOTIFICATION_API_URL'] || 'http://localhost:3003' %>
