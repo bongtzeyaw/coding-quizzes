@@ -138,7 +138,7 @@ class NotificationLogger
     log.user_id = user_id
     log.type = channel_type
     log.event = event
-    log.sent_at = Time.now
+    log.sent_at = Time.now.utc
     log.save
   end
 end
