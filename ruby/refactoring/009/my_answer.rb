@@ -82,10 +82,12 @@ class EmailServiceClient
 end
 
 class SlackNotifierClient
+  SALES_CHANNEL = '#sales'
+
   class << self
     def notify_order_confirmation(order)
       SlackNotifier.notify(
-        '#sales',
+        SALES_CHANNEL,
         SlackNotificationMessageGenerator.generate_order_confirmation_message(order)
       )
     end
