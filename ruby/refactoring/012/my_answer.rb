@@ -36,7 +36,7 @@ class AccountLockManager
   def record_failed_attempt
     @user.failed_attempts = 0 if @user.failed_attempts.nil?
     @user.failed_attempts += 1
-    @user.last_failed_at = Time.now
+    @user.last_failed_at = Time.now.utc
     @user.save
   end
 
@@ -50,7 +50,7 @@ class AccountLockManager
   end
 
   def lock_active?
-    locked? && (Time.now - @user.locked_at <= LOCK_COOLDOWN_PERIOD)
+    locked? && (Time.now.utc - @user.locked_at.utc <= LOCK_COOLDOWN_PERIOD)
   end
 
   def should_lock?
@@ -59,7 +59,7 @@ class AccountLockManager
 
   def lock_account
     @user.locked = true
-    @user.locked_at = Time.now
+    @user.locked_at = Time.now.utc
     @user.save
   end
 
@@ -89,7 +89,7 @@ class SessionManager
       session = Session.new
       session.user_id = user.id
       session.token = token
-      session.expires_at = Time.now + SESSION_DURATION
+      session.expires_at = Time.now.utc + SESSION_DURATION
       session.save
 
       token
@@ -125,7 +125,7 @@ class SessionManager
     end
 
     def session_expired?(session)
-      Time.now > session.expires_at
+      Time.now.utc > session.expires_at.utc
     end
   end
 end
@@ -161,7 +161,7 @@ class AuthenticationService
     private
 
     def record_login(user)
-      user.last_login_at = Time.now
+      user.last_login_at = Time.now.utc
       user.save
     end
   end
