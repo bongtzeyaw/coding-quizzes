@@ -1,5 +1,13 @@
 # frozen_string_literal: true
 
+# Placeholder transaction implementation
+class Transaction
+  def self.run
+    yield
+    # Add rollback logic here
+  end
+end
+
 class EmailGenerator
   class << self
     def generate_order_confirmation_email(order)
@@ -237,8 +245,10 @@ class OrderProcessor
 
     return order_validation_result unless order_validation_result[:success]
 
-    confirm_order!(order)
-    @event_bus.publish(:order_confirmed, order)
+    Transaction.run do
+      confirm_order!(order)
+      @event_bus.publish(:order_confirmed, order)
+    end
 
     { success: true, order_id: order.id }
   rescue StandardError => e
