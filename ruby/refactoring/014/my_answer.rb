@@ -68,15 +68,15 @@ end
 
 class SeasonalDiscount < Discount
   DISCOUNT_RULES = [
-    { start_date: Time.new(2024, 12, 1), end_date: Time.new(2024, 12, 31), categories: %w[electronics toys],
+    { start_date: Time.new(2024, 12, 1).utc, end_date: Time.new(2024, 12, 31).utc, categories: %w[electronics toys],
       rate: 0.20 },
-    { start_date: Time.new(2024, 11, 24), end_date: Time.new(2024, 11, 27), categories: nil, rate: 0.30 }
+    { start_date: Time.new(2024, 11, 24).utc, end_date: Time.new(2024, 11, 27).utc, categories: nil, rate: 0.30 }
   ].freeze
 
-  def initialize(product, now: Time.now)
+  def initialize(product)
     super()
     @product = product
-    @now = now
+    @now = Time.now.utc
   end
 
   private
