@@ -268,7 +268,7 @@ class OrderProcessor
 
   def confirm_order!(order)
     order.status = 'confirmed'
-    order.confirmed_at = Time.now
+    order.confirmed_at = Time.now.utc
     order.save
   end
 end
