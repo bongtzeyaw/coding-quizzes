@@ -56,6 +56,37 @@ class TimeRange
   end
 end
 
+class PredefinedHours
+  class << self
+    def time_range(date)
+      start_time = Time.new(
+        date.year,
+        date.month,
+        date.day,
+        self::START_HOUR,
+        self::START_MINUTE
+      ).utc
+
+      end_time = Time.new(
+        date.year,
+        date.month,
+        date.day,
+        self::END_HOUR,
+        self::END_MINUTE
+      ).utc
+
+      TimeRange.new(start_time:, end_time:)
+    end
+  end
+end
+
+class BusinessHours < PredefinedHours
+  START_HOUR = 9
+  START_MINUTE = 0
+  END_HOUR = 18
+  END_MINUTE = 0
+end
+
 class EventValidator
   DURATION_MIN = 0
   DURATION_MAX = 24
@@ -117,12 +148,7 @@ end
 
 class AvailableSlotFinder
   class << self
-    def find(date:, slot_duration_hours:)
-      search_range = TimeRange.new(
-        start_time: Time.new(date.year, date.month, date.day, 9, 0),
-        end_time: Time.new(date.year, date.month, date.day, 18, 0)
-      )
-
+    def find(date:, slot_duration_hours:, search_range: BusinessHours.time_range(date))
       events_in_search_range = find_events(search_range)
 
       available_slots = []
