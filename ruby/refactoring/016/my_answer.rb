@@ -1,17 +1,104 @@
+# frozen_string_literal: true
+
+require 'time'
+
+class TimeDateParser
+  def self.parse_time(str)
+    Time.parse(str).utc
+  rescue ArgumentError
+    puts 'Warning: Unable to parse time string'
+    nil
+  end
+
+  def self.parse_date(str)
+    Date.parse(str)
+  rescue ArgumentError
+    puts 'Warning: Unable to parse date string'
+    nil
+  end
+end
+
+class TimeRange
+  attr_reader :start_time, :duration_hours, :end_time
+
+  def initialize(start_time:, duration_hours: nil, end_time: nil)
+    @start_time = start_time.utc
+
+    if duration_hours.nil? && end_time.nil?
+      raise ArgumentError, 'Must provide either duration_hours or end_time'
+    elsif duration_hours && end_time
+      raise ArgumentError, 'Cannot provide both duration_hours and end_time'
+    end
+
+    if duration_hours
+      @duration_hours = duration_hours
+      @end_time = @start_time + (@duration_hours * 60 * 60)
+    else
+      @duration_hours = (end_time - start_time) / 60 * 60
+      @end_time = end_time.utc
+    end
+  end
+
+  def range
+    @range ||= @start_time..@end_time
+  end
+
+  def overlaps?(other)
+    range.overlaps?(other.range)
+  end
+
+  def includes?(time)
+    range.include?(time)
+  end
+
+  def precedes?(time)
+    @end_time <= time
+  end
+end
+
+class EventValidator
+  DURATION_MIN = 0
+  DURATION_MAX = 24
+
+  def initialize(time_range)
+    @time_range = time_range
+  end
+
+  def validate
+    return { error: 'Start time must be in the future' } unless future?
+    return { error: "Duration must be between #{DURATION_MIN} and #{DURATION_MAX} hours" } unless valid_duration?
+
+    { success: true }
+  end
+
+  private
+
+  def future?
+    @time_range.start_time >= Time.now.utc
+  end
+
+  def valid_duration?
+    @time_range.duration_hours.between?(DURATION_MIN, DURATION_MAX)
+  end
+end
+
 class EventScheduler
   def create_event(title, start_time_str, duration_hours)
-    year = start_time_str[0..3].to_i
-    month = start_time_str[5..6].to_i
-    day = start_time_str[8..9].to_i
-    hour = start_time_str[11..12].to_i
-    minute = start_time_str[14..15].to_i
+    start_time = TimeDateParser.parse_time(start_time_str)
+    return { error: 'Invalid time format' } unless start_time
 
-    start_time = Time.new(year, month, day, hour, minute)
-    end_time = start_time + (duration_hours * 3600)
+    time_range = TimeRange.new(start_time:, duration_hours:)
 
-    return { error: 'Start time must be in the future' } if start_time < Time.now
+    validation_result = EventValidator.new(time_range).validate
+    return validation_result unless validation_result[:success]
 
-    return { error: 'Duration must be between 0 and 24 hours' } if duration_hours <= 0 || duration_hours > 24
+    year = time_range.start_time.year
+    month = time_range.start_time.month
+    day = time_range.start_time.day
+    hour = time_range.start_time.hour
+    minute = time_range.start_time.min
+
+    end_time = time_range.end_time
 
     existing_events = Event.all
     for i in 0..existing_events.length - 1
@@ -37,9 +124,12 @@ class EventScheduler
   end
 
   def get_available_slots(date_str, slot_duration_hours)
-    year = date_str[0..3].to_i
-    month = date_str[5..6].to_i
-    day = date_str[8..9].to_i
+    date = TimeDateParser.parse_date(date_str)
+    return { error: 'Invalid date format' } unless date
+
+    year = date.year
+    month = date.month
+    day = date.day
 
     start_of_day = Time.new(year, month, day, 9, 0)
     end_of_day = Time.new(year, month, day, 18, 0)
