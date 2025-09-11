@@ -1,5 +1,37 @@
 # frozen_string_literal: true
 
+class Formatter
+  def self.format(content)
+    raise NotImplementedError, "#{self.class} must implement #format"
+  end
+end
+
+class PdfFormatter < Formatter
+  def self.format(content)
+    "PDF: #{content}"
+  end
+end
+
+class PlainTextFormatter < Formatter
+  def self.format(content)
+    content
+  end
+end
+
+class FormatterFactory
+  FORMAT_TYPE_MAP = {
+    pdf: PdfFormatter
+  }.freeze
+
+  def self.create(type)
+    formatter = FORMAT_TYPE_MAP[type.to_sym]
+
+    return PlainTextFormatter unless formatter
+
+    formatter
+  end
+end
+
 class Document
   def initialize(data)
     @data = data
@@ -154,14 +186,6 @@ class DocumentGenerator
 
     content = document_class.new(data).generate
 
-    return generate_pdf(content) if data[:format] == 'pdf'
-
-    content
-  end
-
-  private
-
-  def generate_pdf(content)
-    "PDF: #{content}"
+    FormatterFactory.create(data[:format]).format(content)
   end
 end
