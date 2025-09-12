@@ -24,7 +24,6 @@ class CategoryDiscount < Discount
   }.freeze
 
   def initialize(category, quantity)
-    super()
     @category = category
     @quantity = quantity
   end
@@ -51,7 +50,6 @@ class CustomerRankDiscount < Discount
   }.freeze
 
   def initialize(customer)
-    super()
     @customer = customer
   end
 
@@ -74,7 +72,6 @@ class SeasonalDiscount < Discount
   ].freeze
 
   def initialize(product)
-    super()
     @product = product
     @now = Time.now.utc
   end
@@ -103,7 +100,6 @@ class CategoryBulkDiscount < Discount
   }.freeze
 
   def initialize(product, customer)
-    super()
     @product = product
     @customer = customer
   end
