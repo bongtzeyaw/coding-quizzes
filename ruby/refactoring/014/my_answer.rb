@@ -107,7 +107,7 @@ class CategoryBulkDiscount < Discount
   private
 
   def eligible?
-    @customer.cart&.length&.positive?
+    @customer.cart&.length.positive?
   end
 
   def calculate_rate
