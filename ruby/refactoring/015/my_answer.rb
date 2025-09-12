@@ -23,7 +23,7 @@ class Environment
 end
 
 class ConfigLoader
-  CONFIG_PATH = 'config/app_config.yml'
+  CONFIG_PATH = File.expand_path('config/app_config.yml', __dir__)
 
   def initialize(env)
     @env = env
