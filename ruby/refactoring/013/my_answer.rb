@@ -260,8 +260,6 @@ class NotificationService
     return unless user
 
     channel = NotificationChannelDispatcher.dispatch(type)
-    return unless channel
-
     channel.notify(user:, data:)
   end
 
