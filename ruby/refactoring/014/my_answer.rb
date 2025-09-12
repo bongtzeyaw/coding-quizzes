@@ -12,7 +12,7 @@ class Discount
   end
 
   def calculate_rate
-    raise NotImplementedError, "#{self.class} must implement #rate"
+    raise NotImplementedError, "#{self.class} must implement #calculate_rate"
   end
 end
 
