@@ -2,7 +2,7 @@
 
 class Step
   def execute(input_data)
-    raise NotImplementedError, "#{self.class} must implement the #execute"
+    raise NotImplementedError, "#{self.class} must implement #execute"
   end
 end
 
@@ -271,8 +271,53 @@ class Report
   end
 end
 
+class FileValidator
+  def initialize(file_path)
+    @file_path = file_path
+  end
+
+  def validate
+    raise NotImplementedError, "#{self.class} must implement #validate"
+  end
+
+  private
+
+  def validation_error(message)
+    { success: false, error: message }
+  end
+end
+
+class InputFileValidator < FileValidator
+  def validate
+    return validation_error('Error: Input file cannot be nil') if @file_path.nil?
+    return validation_error('Error: Input file does not exist') unless File.exist?(@file_path)
+    return validation_error('Error: Input file is not readable') unless File.readable?(@file_path)
+
+    { success: true }
+  end
+end
+
+class OutputFileValidator < FileValidator
+  def validate
+    return validation_error('Error: Output file cannot be nil') if @file_path.nil?
+
+    output_dir = File.dirname(File.expand_path(@file_path))
+
+    return validation_error('Error: Output directory does not exist') unless Dir.exist?(output_dir)
+    return validation_error('Error: Output directory is not writable') unless File.writable?(output_dir)
+
+    { success: true }
+  end
+end
+
 class DataProcessor
   def process_data(input_file, output_file, options = {})
+    input_file_validation_result = InputFileValidator.new(input_file).validate
+    return input_file_validation_result[:error] unless input_file_validation_result[:success]
+
+    output_file_validation_result = OutputFileValidator.new(output_file).validate
+    return output_file_validation_result[:error] unless output_file_validation_result[:success]
+
     pipeline = DataPipeline.new
                            .add_step(FileReadingStep.new(input_file))
                            .add_step(DataValidationStep.new(options))
