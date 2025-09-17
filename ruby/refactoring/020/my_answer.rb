@@ -238,6 +238,125 @@ class TransactionLog
   end
 end
 
+class OperationResult
+  attr_reader :info
+
+  def initialize(success:, info: nil)
+    @success = success
+    @info = info
+  end
+
+  def success?
+    @success
+  end
+end
+
+class InventoryValidator
+  def validate
+    raise NotImplementedError, "#{self.class} must implement #validate"
+  end
+
+  protected
+
+  def product_found_in_product_repository?(product_repository:, product_id:)
+    product_repository.product_found?(product_id)
+  end
+
+  def product_found_in_existing_warehouse?(warehouse_repository:, product_id:, warehouse_id:)
+    warehouse_repository.product_found_in_existing_warehouse?(product_id:, warehouse_id:)
+  end
+
+  def sufficient_stock_in_existing_warehouse?(warehouse_repository:, product_id:, warehouse_id:, quantity:)
+    warehouse_repository.sufficient_stock_in_existing_warehouse?(product_id:, warehouse_id:, quantity:)
+  end
+end
+
+class ProductAdditionValidator < InventoryValidator
+  def initialize(product_repository:, product_id:)
+    @product_repository = product_repository
+    @product_id = product_id
+  end
+
+  def validate
+    if product_found_in_product_repository?(
+      product_repository: @product_repository,
+      product_id: @product_id
+    )
+      return OperationResult.new(success: false, info: 'Product already exists')
+    end
+
+    OperationResult.new(success: true)
+  end
+end
+
+class StockTransferValidator < InventoryValidator
+  def initialize(warehouse_repository:, product_id:, from_warehouse_id:, quantity:)
+    @warehouse_repository = warehouse_repository
+    @product_id = product_id
+    @from_warehouse_id = from_warehouse_id
+    @quantity = quantity
+  end
+
+  def validate
+    unless product_found_in_existing_warehouse?(
+      warehouse_repository: @warehouse_repository,
+      product_id: @product_id,
+      warehouse_id: @from_warehouse_id
+    )
+      return OperationResult.new(success: false, info: 'Product not found in source warehouse')
+    end
+
+    unless sufficient_stock_in_existing_warehouse?(
+      warehouse_repository: @warehouse_repository,
+      product_id: @product_id,
+      warehouse_id: @from_warehouse_id,
+      quantity: @quantity
+    )
+      return OperationResult.new(success: false, info: 'Insufficient stock')
+    end
+
+    OperationResult.new(success: true)
+  end
+end
+
+class ProductSaleValidator < InventoryValidator
+  def initialize(product_repository:, warehouse_repository:, product_id:, warehouse_id:, quantity:)
+    @product_repository = product_repository
+    @warehouse_repository = warehouse_repository
+    @product_id = product_id
+    @warehouse_id = warehouse_id
+    @quantity = quantity
+  end
+
+  def validate
+    unless product_found_in_product_repository?(
+      product_repository: @product_repository,
+      product_id: @product_id
+    )
+      return OperationResult.new(success: false, info: 'Product not found')
+    end
+
+    unless product_found_in_existing_warehouse?(
+      warehouse_repository: @warehouse_repository,
+      product_id: @product_id,
+      warehouse_id: @warehouse_id
+    )
+      return OperationResult.new(success: false, info: 'Product not found in warehouse')
+    end
+
+    unless sufficient_stock_in_existing_warehouse?(
+      warehouse_repository: @warehouse_repository,
+      product_id: @product_id,
+      warehouse_id: @warehouse_id,
+      quantity: @quantity
+    )
+      return OperationResult.new(success: false, info: 'Insufficient stock')
+    end
+
+    OperationResult.new(success: true)
+  end
+end
+
 class InventoryManager
   def initialize
     @product_repository = ProductRepository.new
@@ -246,8 +365,21 @@ class InventoryManager
   end
 
   def add_product(id, name, price, warehouse_id, quantity)
-    if @product_repository.product_found?(id)
-      puts 'Product already exists'
+    product = Product.new(
+      id:,
+      name:,
+      price:
+    )
+
+    validator = ProductAdditionValidator.new(
+      product_repository: @product_repository,
+      product_id: id
+    )
+
+    validation_result = validator.validate
+
+    unless validation_result.success?
+      puts validation_result.info
       return false
     end
 
@@ -269,13 +401,17 @@ class InventoryManager
   end
 
   def transfer_stock(product_id, from_warehouse, to_warehouse, quantity)
-    unless @warehouse_repository.product_found_in_existing_warehouse?(product_id:, warehouse_id: from_warehouse)
-      puts 'Product not found in source warehouse'
-      return false
-    end
+    validator = StockTransferValidator.new(
+      warehouse_repository: @warehouse_repository,
+      product_id:,
+      from_warehouse_id:,
+      quantity:
+    )
 
-    if @warehouse_repository.sufficient_stock_in_existing_warehouse?(product_id:, warehouse_id: from_warehouse, quantity:)
-      puts 'Insufficient stock'
+    validation_result = validator.validate
+
+    unless validation_result.success?
+      puts validation_result.info
       return false
     end
 
@@ -297,19 +433,19 @@ class InventoryManager
   end
 
   def sell_product(product_id, warehouse_id, quantity, customer_name)
-    unless @product_repository.product_found?(id)
-      puts 'Product not found'
+    validator = ProductSaleValidator.new(
+      product_repository: @product_repository,
+      warehouse_repository: @warehouse_repository,
+      product_id:,
+      warehouse_id:,
+      quantity:
+    )
+
+    validation_result = validator.validate
+
+    unless validation_result.success?
+      puts validation_result.info
       return nil
-    end
-
-    unless @warehouse_repository.product_found_in_existing_warehouse?(product_id:, warehouse_id:)
-      puts 'Product not found in source warehouse'
-      return false
-    end
-
-    if @warehouse_repository.sufficient_stock_in_existing_warehouse?(product_id:, warehouse_id:, quantity:)
-      puts 'Insufficient stock'
-      return false
     end
 
     total_price = @products[product_id][:price] * quantity
