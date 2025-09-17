@@ -248,6 +248,29 @@ class DataPipeline
   end
 end
 
+class Report
+  def initialize(metrics)
+    @total_length = metrics[:total_length] || 0
+    @invalid_count = metrics[:invalid_count] || 0
+    @output_length = metrics[:output_length] || 0
+  end
+
+  def print
+    puts 'Processing completed:'
+    puts "  Total lines: #{@total_length}"
+    puts "  Invalid lines: #{@invalid_count}"
+    puts "  Output lines: #{@output_length}"
+  end
+
+  def to_h
+    {
+      total: @total_length,
+      invalid: @invalid_count,
+      output: @output_length
+    }
+  end
+end
+
 class DataProcessor
   def process_data(input_file, output_file, options = {})
     pipeline = DataPipeline.new
@@ -259,16 +282,9 @@ class DataProcessor
                            .add_step(FileWritingStep.new(output_file))
 
     metrics = pipeline.execute
+    report = Report.new(metrics)
 
-    puts 'Processing completed:'
-    puts "  Total lines: #{metrics[:total_length]}"
-    puts "  Invalid lines: #{metrics[:invalid_count]}"
-    puts "  Output lines: #{metrics[:output_length]}"
-
-    {
-      total: metrics[:total_length],
-      invalid: metrics[:invalid_count],
-      output: metrics[:output_length]
-    }
+    report.print
+    report.to_h
   end
 end
