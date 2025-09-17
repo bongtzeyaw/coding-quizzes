@@ -3,18 +3,20 @@
 require 'time'
 
 class TimeDateParser
-  def self.parse_time(str)
-    Time.parse(str).utc
-  rescue ArgumentError
-    puts 'Warning: Unable to parse time string'
-    nil
-  end
+  class << self
+    def parse_time(str)
+      Time.parse(str).utc
+    rescue ArgumentError
+      puts 'Warning: Unable to parse time string'
+      nil
+    end
 
-  def self.parse_date(str)
-    Date.parse(str)
-  rescue ArgumentError
-    puts 'Warning: Unable to parse date string'
-    nil
+    def parse_date(str)
+      Date.parse(str)
+    rescue ArgumentError
+      puts 'Warning: Unable to parse date string'
+      nil
+    end
   end
 end
 
