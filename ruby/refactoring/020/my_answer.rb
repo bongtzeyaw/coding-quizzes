@@ -36,11 +36,123 @@ class ProductRepository
   end
 end
 
+class Warehouse
+  attr_reader :id
+
+  def initialize(id)
+    @id = id
+    @inventory = {}
+  end
+
+  def stock(product_id)
+    @inventory[product_id]
+  end
+
+  def product_found?(product_id)
+    @inventory.key?(product_id)
+  end
+
+  def stock_positive?(product_id)
+    @inventory[product_id]&.positive?
+  end
+
+  def sufficient_stock?(product_id:, quantity:)
+    @inventory[product_id] >= quantity
+  end
+
+  def add_stock(product_id:, quantity:)
+    @inventory[product_id] ||= 0
+    @inventory[product_id] += quantity
+  end
+
+  def reduce_stock(product_id:, quantity:)
+    @inventory[product_id] -= quantity
+  end
+
+  def total_value_and_items(product_repository)
+    filtered_inventory = @inventory.filter_map do |product_id, quantity|
+      product = product_repository.find_product_by(product_id)
+
+      [product, quantity] if product && quantity.positive?
+    end
+
+    total_value = filtered_inventory.sum do |product, quantity|
+      ValueCalculator.calculate_total_value(price: product.price, quantity:)
+    end
+
+    total_items = filtered_inventory.sum { |_, quantity| quantity }
+
+    [total_value, total_items]
+  end
+end
+
+class WarehouseRepository
+  def initialize
+    @warehouses = {}
+  end
+
+  def find(id)
+    warehouse = @warehouses[id]
+    raise 'Warehouse not found' unless warehouse
+
+    warehouse
+  end
+
+  def find_or_create(id)
+    @warehouses[id] ||= Warehouse.new(id)
+  end
+
+  def all
+    @warehouses.values
+  end
+
+  def warehouses_with_stock(product_id)
+    @warehouses.select do |_warehouse_id, warehouse|
+      warehouse.stock_positive?(product_id)
+    end
+  end
+
+  def product_found_in_existing_warehouse?(product_id:, warehouse_id:)
+    warehouse = @warehouses[warehouse_id]
+    return false unless warehouse
+
+    warehouse.product_found?(product_id)
+  end
+
+  def sufficient_stock_in_existing_warehouse?(product_id:, warehouse_id:, quantity:)
+    warehouse = @warehouses[warehouse_id]
+    return false unless warehouse
+
+    warehouse.sufficient_stock?(product_id:, quantity:)
+  end
+
+  def add_stock(product_id:, warehouse_id:, quantity:)
+    warehouse = find_or_create(warehouse_id)
+
+    warehouse.add_stock(product_id:, quantity:)
+  end
+
+  def reduce_stock(product_id:, warehouse_id:, quantity:)
+    warehouse = @warehouses[warehouse_id]
+    raise 'Warehouse not found' unless warehouse
+
+    warehouse.reduce_stock(product_id:, quantity:)
+  end
+
+  def transfer_stock(product_id:, from_warehouse_id:, to_warehouse_id:, quantity:)
+    from_warehouse = find(from_warehouse_id)
+    to_warehouse = find_or_create(to_warehouse_id)
+
+    from_warehouse.reduce_stock(product_id:, quantity:)
+    to_warehouse.add_stock(product_id:, quantity:)
+  end
+end
+
 class InventoryManager
   def initialize
     @product_repository = ProductRepository.new
+    @warehouse_repository = WarehouseRepository.new
 
-    @warehouses = {}
     @transactions = []
   end
 
@@ -52,13 +164,11 @@ class InventoryManager
 
     @product_repository.add(product:, total_quantity: quantity)
 
-    @warehouses[warehouse_id] = {} unless @warehouses[warehouse_id]
-
-    if @warehouses[warehouse_id][id]
-      @warehouses[warehouse_id][id] += quantity
-    else
-      @warehouses[warehouse_id][id] = quantity
-    end
+    @warehouse_repository.add_stock(
+      product_id: id,
+      warehouse_id:,
+      quantity:
+    )
 
     @transactions << {
       type: 'ADD',
@@ -72,25 +182,22 @@ class InventoryManager
   end
 
   def transfer_stock(product_id, from_warehouse, to_warehouse, quantity)
-    if !@warehouses[from_warehouse] || !@warehouses[from_warehouse][product_id]
+    unless @warehouse_repository.product_found_in_existing_warehouse?(product_id:, warehouse_id: from_warehouse)
       puts 'Product not found in source warehouse'
       return false
     end
 
-    if @warehouses[from_warehouse][product_id] < quantity
+    if @warehouse_repository.sufficient_stock_in_existing_warehouse?(product_id:, warehouse_id: from_warehouse, quantity:)
       puts 'Insufficient stock'
       return false
     end
 
-    @warehouses[to_warehouse] = {} unless @warehouses[to_warehouse]
-
-    @warehouses[from_warehouse][product_id] -= quantity
-
-    if @warehouses[to_warehouse][product_id]
-      @warehouses[to_warehouse][product_id] += quantity
-    else
-      @warehouses[to_warehouse][product_id] = quantity
-    end
+    @warehouse_repository.transfer_stock(
+      product_id:,
+      from_warehouse_id:,
+      to_warehouse_id:,
+      quantity:
+    )
 
     @transactions << {
       type: 'TRANSFER',
@@ -110,19 +217,23 @@ class InventoryManager
       return nil
     end
 
-    if !@warehouses[warehouse_id] || !@warehouses[warehouse_id][product_id]
-      puts 'Product not found in warehouse'
-      return nil
+    unless @warehouse_repository.product_found_in_existing_warehouse?(product_id:, warehouse_id:)
+      puts 'Product not found in source warehouse'
+      return false
     end
 
-    if @warehouses[warehouse_id][product_id] < quantity
+    if @warehouse_repository.sufficient_stock_in_existing_warehouse?(product_id:, warehouse_id:, quantity:)
       puts 'Insufficient stock'
-      return nil
+      return false
     end
 
     total_price = @products[product_id][:price] * quantity
 
-    @warehouses[warehouse_id][product_id] -= quantity
+    @warehouse_repository.reduce_stock(
+      product_id: product_id,
+      warehouse_id: warehouse_id,
+      quantity: quantity
+    )
 
     @product_repository.reduce_total_quantity(product_id:, quantity:)
 
@@ -161,7 +272,7 @@ class InventoryManager
           Locations:
 
           #{
-            @warehouses.each do |warehouse_id, inventory|
+            @warehouse_repository.all.each do |warehouse_id, inventory|
               report += "    #{warehouse_id}: #{inventory[id]} units\n" if inventory[id] && inventory[id] > 0
             end
           }
@@ -171,7 +282,7 @@ class InventoryManager
     report += "WAREHOUSE SUMMARY\n"
     report += "=================\n\n"
 
-    @warehouses.each do |warehouse_id, inventory|
+    @warehouse_repository.all.each do |warehouse_id, inventory|
       total_value = 0
       total_items = 0
 
