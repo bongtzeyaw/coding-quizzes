@@ -363,6 +363,130 @@ class ProductSaleValidator < InventoryValidator
   end
 end
 
+class Command
+  def initialize(product_repository:, warehouse_repository:, transaction_log:)
+    @product_repository = product_repository
+    @warehouse_repository = warehouse_repository
+    @transaction_log = transaction_log
+  end
+end
+
+class ProductAdditionCommand < Command
+  def execute(id:, name:, price:, warehouse_id:, quantity:)
+    product = Product.new(
+      id:,
+      name:,
+      price:
+    )
+
+    validator = ProductAdditionValidator.new(
+      product_repository: @product_repository,
+      product_id: id
+    )
+
+    validation_result = validator.validate
+
+    unless validation_result.success?
+      puts validation_result.info
+      return false
+    end
+
+    @product_repository.add(product:, total_quantity: quantity)
+
+    @warehouse_repository.add_stock(
+      product_id: id,
+      warehouse_id:,
+      quantity:
+    )
+
+    @transaction_log.record(ProductAdditionTransaction.new(
+                              product_id: id,
+                              warehouse_id:,
+                              quantity:
+                            ))
+
+    true
+  end
+end
+
+class StockTransferCommand < Command
+  def execute(product_id:, from_warehouse_id:, to_warehouse_id:, quantity:)
+    validator = StockTransferValidator.new(
+      warehouse_repository: @warehouse_repository,
+      product_id:,
+      from_warehouse_id:,
+      quantity:
+    )
+
+    validation_result = validator.validate
+
+    unless validation_result.success?
+      puts validation_result.info
+      return false
+    end
+
+    @warehouse_repository.transfer_stock(
+      product_id:,
+      from_warehouse_id:,
+      to_warehouse_id:,
+      quantity:
+    )
+
+    @transaction_log.record(StockTransferTransaction.new(
+                              product_id: product_id,
+                              from_warehouse_id: from_warehouse_id,
+                              to_warehouse_id: to_warehouse_id,
+                              quantity: quantity
+                            ))
+
+    true
+  end
+end
+
+class ProductSaleCommand < Command
+  def execute(product_id:, warehouse_id:, quantity:, customer_name:)
+    validator = ProductSaleValidator.new(
+      product_repository: @product_repository,
+      warehouse_repository: @warehouse_repository,
+      product_id:,
+      warehouse_id:,
+      quantity:
+    )
+
+    validation_result = validator.validate
+
+    unless validation_result.success?
+      puts validation_result.info
+      return nil
+    end
+
+    @warehouse_repository.reduce_stock(
+      product_id: product_id,
+      warehouse_id: warehouse_id,
+      quantity: quantity
+    )
+
+    @product_repository.reduce_total_quantity(product_id:, quantity:)
+
+    product = @product_repository.find_product_by(product_id)
+    total_price = ValueCalculator.calculate_total_value(price: product.price, quantity:)
+
+    @transaction_log.record(ProductSaleTransaction.new(
+                              product_id:,
+                              warehouse_id:,
+                              quantity:,
+                              customer_name:,
+                              total_price:
+                            ))
+
+    {
+      product: product.name,
+      quantity:,
+      total_price:
+    }
+  end
+end
+
 class ReportSection
   def initialize(product_repository:, warehouse_repository:)
     @product_repository = product_repository
@@ -480,114 +604,50 @@ class InventoryManager
     @transaction_log = TransactionLog.new
   end
 
-  def add_product(id, name, price, warehouse_id, quantity)
-    product = Product.new(
+  def add_product(id:, name:, price:, warehouse_id:, quantity:)
+    product_addition_command = ProductAdditionCommand.new(
+      product_repository: @product_repository,
+      warehouse_repository: @warehouse_repository,
+      transaction_log: @transaction_log
+    )
+
+    product_addition_command.execute(
       id:,
       name:,
-      price:
-    )
-
-    validator = ProductAdditionValidator.new(
-      product_repository: @product_repository,
-      product_id: id
-    )
-
-    validation_result = validator.validate
-
-    unless validation_result.success?
-      puts validation_result.info
-      return false
-    end
-
-    @product_repository.add(product:, total_quantity: quantity)
-
-    @warehouse_repository.add_stock(
-      product_id: id,
+      price:,
       warehouse_id:,
       quantity:
     )
-
-    @transaction_log.record(ProductAdditionTransaction.new(
-                              product_id: id,
-                              warehouse_id:,
-                              quantity:
-                            ))
-
-    true
   end
 
-  def transfer_stock(product_id, from_warehouse, to_warehouse, quantity)
-    validator = StockTransferValidator.new(
+  def transfer_stock(product_id:, from_warehouse_id:, to_warehouse_id:, quantity:)
+    stock_transfer_command = StockTransferCommand.new(
+      product_repository: @product_repository,
       warehouse_repository: @warehouse_repository,
-      product_id:,
-      from_warehouse_id:,
-      quantity:
+      transaction_log: @transaction_log
     )
 
-    validation_result = validator.validate
-
-    unless validation_result.success?
-      puts validation_result.info
-      return false
-    end
-
-    @warehouse_repository.transfer_stock(
+    stock_transfer_command.execute(
       product_id:,
       from_warehouse_id:,
       to_warehouse_id:,
       quantity:
     )
-
-    @transaction_log.record(StockTransferTransaction.new(
-                              product_id: product_id,
-                              from_warehouse_id: from_warehouse_id,
-                              to_warehouse_id: to_warehouse_id,
-                              quantity: quantity
-                            ))
-
-    true
   end
 
-  def sell_product(product_id, warehouse_id, quantity, customer_name)
-    validator = ProductSaleValidator.new(
+  def sell_product(product_id:, warehouse_id:, quantity:, customer_name:)
+    product_sale_command = ProductSaleCommand.new(
       product_repository: @product_repository,
       warehouse_repository: @warehouse_repository,
+      transaction_log: @transaction_log
+    )
+
+    product_sale_command.execute(
       product_id:,
       warehouse_id:,
-      quantity:
+      quantity:,
+      customer_name:
     )
-
-    validation_result = validator.validate
-
-    unless validation_result.success?
-      puts validation_result.info
-      return nil
-    end
-
-    product = @product_repository.find_product_by(product_id)
-    total_price = ValueCalculator.calculate_total_value(price: product.price, quantity: quantity)
-
-    @warehouse_repository.reduce_stock(
-      product_id: product_id,
-      warehouse_id: warehouse_id,
-      quantity: quantity
-    )
-
-    @product_repository.reduce_total_quantity(product_id:, quantity:)
-
-    @transaction_log.record(ProductSaleTransaction.new(
-                              product_id:,
-                              warehouse_id:,
-                              quantity:,
-                              customer_name:,
-                              total_price:
-                            ))
-
-    {
-      product: @products[product_id][:name],
-      quantity: quantity,
-      total_price: total_price
-    }
   end
 
   def get_inventory_report
@@ -597,8 +657,8 @@ class InventoryManager
     ).generate
   end
 
-  def get_low_stock_alert(threshold = 10)
-    AlertService.low_stock_alerts(
+  def get_low_stock_alert(threshold: 10)
+    AlertService.create_low_stock_alerts(
       product_repository: @product_repository,
       threshold:
     )
