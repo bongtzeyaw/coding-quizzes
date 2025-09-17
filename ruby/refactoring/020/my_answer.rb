@@ -357,6 +357,105 @@ class ProductSaleValidator < InventoryValidator
   end
 end
 
+class ReportSection
+  def initialize(product_repository:, warehouse_repository:)
+    @product_repository = product_repository
+    @warehouse_repository = warehouse_repository
+  end
+
+  def generate
+    <<~REPORT
+      #{generate_header}
+      #{generate_content}
+    REPORT
+  end
+
+  private
+
+  def generate_header
+    <<~HEADER
+      #{self.class::TITLE}
+      =================
+    HEADER
+  end
+
+  def generate_content
+    raise NotImplementedError, "#{self.class} must implement #generate_content"
+  end
+end
+
+class ProductsReportSection < ReportSection
+  TITLE = 'INVENTORY REPORT'
+
+  private
+
+  def total_value(product, quantity)
+    ValueCalculator.calculate_total_value(price: product.price, quantity:)
+  end
+
+  def generate_locations_text(product_id, _product)
+    @warehouse_repository.warehouses_with_stock(product_id).map do |warehouse_id, warehouse|
+      "  #{warehouse_id}: #{warehouse.stock(product_id)} units"
+    end.join("\n")
+  end
+
+  def generate_content
+    @product_repository.all.map do |product_detail|
+      product = product_detail[:product]
+      total_quantity = product_detail[:total_quantity]
+
+      <<~CONTENT
+        Product: #{product.name}
+          Total Quantity: #{total_quantity}
+          Price: $#{product.price}
+          Total Value: $#{total_value(product, total_quantity)}
+          Locations:
+
+          #{generate_locations_text(product.id, product)}
+      CONTENT
+    end.join("\n")
+  end
+end
+
+class WarehousesReportSection < ReportSection
+  TITLE = 'WAREHOUSE REPORT'
+
+  private
+
+  def generate_content
+    @warehouse_repository.all.map do |warehouse|
+      total_value, total_items = warehouse.total_value_and_items(@product_repository)
+
+      <<~CONTENT
+        Warehouse: #{warehouse.id}
+          Total Items: #{total_items}
+          Total Value: $#{total_value}
+      CONTENT
+    end.join("\n")
+  end
+end
+
+class Report
+  def initialize(product_repository:, warehouse_repository:)
+    @product_repository = product_repository
+    @warehouse_repository = warehouse_repository
+  end
+
+  def generate
+    products_report_section = ProductsReportSection.new(
+      product_repository: @product_repository,
+      warehouse_repository: @warehouse_repository
+    ).generate
+
+    warehouses_report_section = WarehousesReportSection.new(
+      product_repository: @product_repository,
+      warehouse_repository: @warehouse_repository
+    ).generate
+
+    products_report_section + warehouses_report_section
+  end
+end
+
 class InventoryManager
   def initialize
     @product_repository = ProductRepository.new
@@ -474,52 +573,10 @@ class InventoryManager
   end
 
   def get_inventory_report
-    report = "INVENTORY REPORT\n"
-    report += "================\n\n"
-
-    @product_repository.reduce_total_quantity(product_id:, quantity:)
-
-    @product_repository.all.map do |product_detail|
-      product = product_detail[:product]
-      total_quantity = product_detail[:total_quantity]
-
-      <<~CONTENT
-        Product: #{product.name}
-          Total Quantity: #{total_quantity}
-          Price: $#{product.price}
-          Total Value: $#{total_value(product, total_quantity)}
-          Locations:
-
-          #{
-            @warehouse_repository.all.each do |warehouse_id, inventory|
-              report += "    #{warehouse_id}: #{inventory[id]} units\n" if inventory[id] && inventory[id] > 0
-            end
-          }
-      CONTENT
-    end.join("\n")
-
-    report += "WAREHOUSE SUMMARY\n"
-    report += "=================\n\n"
-
-    @warehouse_repository.all.each do |warehouse_id, inventory|
-      total_value = 0
-      total_items = 0
-
-      inventory.each do |product_id, quantity|
-        product = product_repository.find_product_by(product_id)
-
-        if product && quantity > 0
-          total_value += product.price * quantity
-          total_items += quantity
-        end
-      end
-
-      report += "Warehouse: #{warehouse_id}\n"
-      report += "  Total Items: #{total_items}\n"
-      report += "  Total Value: $#{total_value}\n\n"
-    end
-
-    report
+    Report.new(
+      product_repository: @product_repository,
+      warehouse_repository: @warehouse_repository
+    ).generate
   end
 
   def get_low_stock_alert(threshold = 10)
