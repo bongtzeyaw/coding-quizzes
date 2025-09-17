@@ -78,55 +78,136 @@ class ServiceDispatcher
   end
 end
 
+class Collector
+  def initialize(service)
+    @service = service
+  end
+
+  def collect
+    raise NotImplementedError, "#{self.class} must implement #collect"
+  end
+end
+
+class PerformanceCollector < Collector
+  def collect
+    start_time = Time.now.utc
+    cpu_before = cpu_usage
+    memory_before = memory_usage
+
+    result = @service.call
+
+    end_time = Time.now.utc
+    cpu_after = cpu_usage
+    memory_after = memory_usage
+
+    {
+      execution_time: end_time - start_time,
+      cpu_usage: cpu_after - cpu_before,
+      memory_usage: memory_after - memory_before,
+      result:
+    }
+  end
+
+  private
+
+  def cpu_usage
+    rand(0..100)
+  end
+
+  def memory_usage
+    rand(100..1000)
+  end
+end
+
+class AvailabilityCollector < Collector
+  def collect
+    success_count = 0
+    total_count = 10
+
+    total_count.times do
+      success_count += 1 if @service.check_health
+      sleep(1)
+    end
+
+    success_rate = (success_count.to_f / total_count) * 100
+
+    {
+      success_rate:,
+      failed_checks: total_count - success_count
+    }
+  end
+end
+
+class ErrorRateCollector < Collector
+  def collect
+    errors = @service.errors
+
+    error_count = errors.length
+    error_types = errors.group_by { |e| e[:type] || 'Unknown' }
+                        .transform_values(&:count)
+
+    {
+      error_count: error_count,
+      error_types: error_types
+    }
+  end
+end
+
+class CollectorDispatcher
+  COLLECTOR_MAP = {
+    performance: PerformanceCollector,
+    availability: AvailabilityCollector,
+    error_rate: ErrorRateCollector
+  }.freeze
+
+  class << self
+    def dispatch(metric_type)
+      COLLECTOR_MAP[metric_type.to_sym]
+    end
+  end
+end
+
 class MetricsCollector
   def collect_and_report(service_name, metric_type)
+    collector_class = CollectorDispatcher.dispatch(metric_type)
+    return nil unless collector_class
+
     service_class = ServiceDispatcher.dispatch(service_name)
     return nil unless service_class
 
+    metrics = collector_class.new(service_class).collect
+
     if metric_type == 'performance'
-      start_time = Time.now
-      cpu_before = get_cpu_usage
-      memory_before = get_memory_usage
-
-      result = service_class.call
-
-      end_time = Time.now
-      cpu_after = get_cpu_usage
-      memory_after = get_memory_usage
+      execution_time = metrics[:execution_time]
+      cpu_usage = metrics[:cpu_usage]
+      memory_usage = metrics[:memory_usage]
+      result = metrics[:result]
 
       report = ''
       report += "Performance Report for #{service_name}\n"
       report += "=====================================\n"
-      report += "Execution Time: #{end_time - start_time} seconds\n"
-      report += "CPU Usage: #{cpu_after - cpu_before}%\n"
-      report += "Memory Usage: #{memory_after - memory_before} MB\n"
+      report += "Execution Time: #{execution_time} seconds\n"
+      report += "CPU Usage: #{cpu_usage}%\n"
+      report += "Memory Usage: #{memory_usage} MB\n"
       report += "Result: #{result}\n"
 
       File.open('metrics.log', 'a') do |f|
         f.puts "[#{Time.now}] #{report}"
       end
 
-      send_email('admin@example.com', 'Performance Alert', report) if end_time - start_time > 5.0
+      send_email('admin@example.com', 'Performance Alert', report) if execution_time > 5.0
 
       report
 
     elsif metric_type == 'availability'
-      success_count = 0
-      total_count = 10
-
-      for i in 0..total_count - 1
-        success_count += 1 if service_class.check_health
-
-        sleep(1)
-      end
-
-      availability = (success_count.to_f / total_count) * 100
+      success_rate = metrics[:success_rate]
+      failed_checks = metrics[:failed_checks]
 
       report = ''
       report += "Availability Report for #{service_name}\n"
       report += "=====================================\n"
-      report += "Success Rate: #{availability}%\n"
-      report += "Failed Checks: #{total_count - success_count}\n"
+      report += "Success Rate: #{success_rate}%\n"
+      report += "Failed Checks: #{failed_checks}\n"
 
       File.open('metrics.log', 'a') do |f|
         f.puts "[#{Time.now}] #{report}"
@@ -137,20 +218,8 @@ class MetricsCollector
       report
 
     elsif metric_type == 'error_rate'
-      errors = service_class.errors
-
-      error_count = errors.length
-      error_types = {}
-
-      for i in 0..errors.length - 1
-        error = errors[i]
-        type = error[:type] || 'Unknown'
-        if error_types[type]
-          error_types[type] += 1
-        else
-          error_types[type] = 1
-        end
-      end
+      error_count = metrics[:error_count]
+      error_types = metrics[:error_types]
 
       report = ''
       report += "Error Report for #{service_name}\n"
@@ -173,14 +242,6 @@ class MetricsCollector
   end
 
   private
-
-  def get_cpu_usage
-    rand(0..100)
-  end
-
-  def get_memory_usage
-    rand(100..1000)
-  end
 
   def send_email(to, subject, body)
     puts "Email sent to #{to}: #{subject}"
