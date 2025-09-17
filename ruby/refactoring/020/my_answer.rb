@@ -456,6 +456,17 @@ class Report
   end
 end
 
+class AlertService
+  def self.create_low_stock_alerts(product_repository:, threshold:)
+    product_repository.all.filter_map do |product_detail|
+      product = product_detail[:product]
+      quantity = product_detail[:total_quantity]
+
+      "LOW STOCK: #{product.name} - Only #{quantity} units remaining" if quantity < threshold
+    end
+  end
+end
+
 class InventoryManager
   def initialize
     @product_repository = ProductRepository.new
@@ -580,17 +591,9 @@ class InventoryManager
   end
 
   def get_low_stock_alert(threshold = 10)
-    alerts = []
-
-    product_repository.all.filter_map do |product_detail|
-      product = product_detail[:product]
-      quantity = product_detail[:total_quantity]
-
-      if product[:total_quantity] < threshold
-        alerts << "LOW STOCK: #{product.name} - Only #{quantity} units remaining"
-      end
-    end
-
-    alerts
+    AlertService.low_stock_alerts(
+      product_repository: @product_repository,
+      threshold:
+    )
   end
 end
