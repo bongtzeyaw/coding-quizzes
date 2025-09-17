@@ -45,8 +45,8 @@ class TimeRange
     @range ||= @start_time..@end_time
   end
 
-  def overlaps?(other)
-    range.overlaps?(other.range)
+  def overlap?(other)
+    range.overlap?(other.range)
   end
 
   def includes?(time)
@@ -136,14 +136,14 @@ end
 class ConflictChecker
   class << self
     def find_conflict(time_range:, existing_events: EventClient.all)
-      existing_events.find { |event| event_overlaps?(event, time_range) }
+      existing_events.find { |event| event_overlap?(event, time_range) }
     end
 
     private
 
-    def event_overlaps?(event, time_range)
+    def event_overlap?(event, time_range)
       event_time_range = TimeRange.new(start_time: event.start_time, end_time: event.end_time)
-      time_range.overlaps?(event_time_range)
+      time_range.overlap?(event_time_range)
     end
   end
 end
