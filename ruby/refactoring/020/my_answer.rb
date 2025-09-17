@@ -148,12 +148,101 @@ class WarehouseRepository
   end
 end
 
+class Transaction
+  def initialize
+    @timestamp = Time.now.utc
+    @type = self.class::TYPE.to_s
+  end
+
+  def to_h
+    raise NotImplementedError, "#{self.class} must implement #to_h"
+  end
+end
+
+class ProductAdditionTransaction < Transaction
+  TYPE = :ADD
+
+  def initialize(product_id:, warehouse_id:, quantity:)
+    super()
+    @product_id = product_id
+    @warehouse_id = warehouse_id
+    @quantity = quantity
+  end
+
+  def to_h
+    {
+      type: @type,
+      product_id: @product_id,
+      warehouse_id: @warehouse_id,
+      quantity: @quantity,
+      timestamp: @timestamp
+    }
+  end
+end
+
+class StockTransferTransaction < Transaction
+  TYPE = :TRANSFER
+
+  def initialize(product_id:, from_warehouse_id:, to_warehouse_id:, quantity:)
+    super()
+    @product_id = product_id
+    @from_warehouse_id = from_warehouse_id
+    @to_warehouse_id = to_warehouse_id
+    @quantity = quantity
+  end
+
+  def to_h
+    {
+      type: @type,
+      product_id: @product_id,
+      from_warehouse: @from_warehouse_id,
+      to_warehouse: @to_warehouse_id,
+      quantity: @quantity,
+      timestamp: @timestamp
+    }
+  end
+end
+
+class ProductSaleTransaction < Transaction
+  TYPE = :SALE
+
+  def initialize(product_id:, warehouse_id:, quantity:, customer_name:, total_price:)
+    super()
+    @product_id = product_id
+    @warehouse_id = warehouse_id
+    @quantity = quantity
+    @customer_name = customer_name
+    @total_price = total_price
+  end
+
+  def to_h
+    {
+      type: @type,
+      product_id: @product_id,
+      warehouse_id: @warehouse_id,
+      quantity: @quantity,
+      customer: @customer_name,
+      total_price: @total_price,
+      timestamp: @timestamp
+    }
+  end
+end
+
+class TransactionLog
+  def initialize
+    @transactions = []
+  end
+
+  def record(transaction)
+    @transactions << transaction.to_h
+  end
+end
+
 class InventoryManager
   def initialize
     @product_repository = ProductRepository.new
     @warehouse_repository = WarehouseRepository.new
-
-    @transactions = []
+    @transaction_log = TransactionLog.new
   end
 
   def add_product(id, name, price, warehouse_id, quantity)
@@ -170,13 +259,11 @@ class InventoryManager
       quantity:
     )
 
-    @transactions << {
-      type: 'ADD',
-      product_id: id,
-      warehouse_id: warehouse_id,
-      quantity: quantity,
-      timestamp: Time.now
-    }
+    @transaction_log.record(ProductAdditionTransaction.new(
+                              product_id: id,
+                              warehouse_id:,
+                              quantity:
+                            ))
 
     true
   end
@@ -199,14 +286,12 @@ class InventoryManager
       quantity:
     )
 
-    @transactions << {
-      type: 'TRANSFER',
-      product_id: product_id,
-      from_warehouse: from_warehouse,
-      to_warehouse: to_warehouse,
-      quantity: quantity,
-      timestamp: Time.now
-    }
+    @transaction_log.record(StockTransferTransaction.new(
+                              product_id: product_id,
+                              from_warehouse_id: from_warehouse_id,
+                              to_warehouse_id: to_warehouse_id,
+                              quantity: quantity
+                            ))
 
     true
   end
@@ -237,15 +322,13 @@ class InventoryManager
 
     @product_repository.reduce_total_quantity(product_id:, quantity:)
 
-    @transactions << {
-      type: 'SALE',
-      product_id: product_id,
-      warehouse_id: warehouse_id,
-      quantity: quantity,
-      customer: customer_name,
-      total_price: total_price,
-      timestamp: Time.now
-    }
+    @transaction_log.record(ProductSaleTransaction.new(
+                              product_id:,
+                              warehouse_id:,
+                              quantity:,
+                              customer_name:,
+                              total_price:
+                            ))
 
     {
       product: @products[product_id][:name],
