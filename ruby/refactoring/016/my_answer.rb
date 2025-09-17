@@ -34,7 +34,7 @@ class TimeRange
       @duration_hours = duration_hours
       @end_time = @start_time + (@duration_hours * 60 * 60)
     else
-      @duration_hours = (end_time - start_time) / 60 * 60
+      @duration_hours = (end_time - start_time) / (60 * 60)
       @end_time = end_time.utc
     end
   end
