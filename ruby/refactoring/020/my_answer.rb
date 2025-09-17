@@ -1,5 +1,11 @@
 # frozen_string_literal: true
 
+class ValueCalculator
+  def self.calculate_total_value(price:, quantity:)
+    price * quantity
+  end
+end
+
 class Product
   attr_reader :id, :name, :price
 
@@ -558,7 +564,8 @@ class InventoryManager
       return nil
     end
 
-    total_price = @products[product_id][:price] * quantity
+    product = @product_repository.find_product_by(product_id)
+    total_price = ValueCalculator.calculate_total_value(price: product.price, quantity: quantity)
 
     @warehouse_repository.reduce_stock(
       product_id: product_id,
