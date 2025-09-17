@@ -5,17 +5,15 @@ require 'time'
 class TimeDateParser
   class << self
     def parse_time(str)
-      Time.parse(str).utc
+      { success: true, result: Time.parse(str).utc }
     rescue ArgumentError
-      puts 'Warning: Unable to parse time string'
-      nil
+      { error: 'Unable to parse time string' }
     end
 
     def parse_date(str)
-      Date.parse(str)
+      { success: true, result: Date.parse(str) }
     rescue ArgumentError
-      puts 'Warning: Unable to parse date string'
-      nil
+      { error: 'Unable to parse date string' }
     end
   end
 end
@@ -199,9 +197,10 @@ end
 
 class EventScheduler
   def create_event(title, start_time_str, duration_hours)
-    start_time = TimeDateParser.parse_time(start_time_str)
-    return { error: 'Invalid time format' } unless start_time
+    time_parse_result = TimeDateParser.parse_time(start_time_str)
+    return time_parse_result unless time_parse_result[:success]
 
+    start_time = time_parse_result[:result]
     time_range = TimeRange.new(start_time:, duration_hours:)
 
     validation_result = EventValidator.new(time_range).validate
@@ -216,7 +215,10 @@ class EventScheduler
   end
 
   def get_available_slots(date_str, slot_duration_hours)
-    date = TimeDateParser.parse_date(date_str)
+    date_parse_result = TimeDateParser.parse_date(date_str)
+    return date_parse_result unless date_parse_result[:success]
+
+    date = date_parse_result[:result]
     return { error: 'Invalid date format' } unless date
 
     AvailableSlotFinder.find(date:, slot_duration_hours:)
