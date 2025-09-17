@@ -227,31 +227,41 @@ class FileWritingStep < Step
   end
 end
 
+class DataPipeline
+  def initialize
+    @steps = []
+  end
+
+  def add_step(step)
+    @steps << step
+    self
+  end
+
+  def execute
+    _data, metrics = @steps.inject([[], {}]) do |(data, metrics), step|
+      data, metric = step.execute(data)
+
+      [data, metrics.merge(metric)]
+    end
+
+    metrics
+  end
+end
+
 class DataProcessor
   def process_data(input_file, output_file, options = {})
-    data = []
-    metrics = {}
+    pipeline = DataPipeline.new
+                           .add_step(FileReadingStep.new(input_file))
+                           .add_step(DataValidationStep.new(options))
+                           .add_step(DataTransformationStep.new(options))
+                           .add_step(DataFilteringStep.new(options))
+                           .add_step(DataSortingStep.new(options))
+                           .add_step(FileWritingStep.new(output_file))
 
-    data, metric = FileReadingStep.new(input_file).execute(data)
-    metrics = metrics.merge(metric)
-
-    data, metric = DataValidationStep.new(options).execute(data)
-    metrics = metrics.merge(metric)
-
-    data, metric = DataTransformationStep.new(options).execute(data)
-    metrics = metrics.merge(metric)
-
-    data, metric = DataFilteringStep.new(options).execute(data)
-    metrics = metrics.merge(metric)
-
-    data, metric = DataSortingStep.new(options).execute(data)
-    metrics = metrics.merge(metric)
-
-    data, metric = FileWritingStep.new(output_file).execute(data)
-    metrics = metrics.merge(metric)
+    metrics = pipeline.execute
 
     puts 'Processing completed:'
-    puts "  Total lines: #{data.length}"
+    puts "  Total lines: #{metrics[:total_length]}"
     puts "  Invalid lines: #{metrics[:invalid_count]}"
     puts "  Output lines: #{metrics[:output_length]}"
 
