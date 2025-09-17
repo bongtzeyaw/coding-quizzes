@@ -1,21 +1,56 @@
-class InventoryManager
+# frozen_string_literal: true
+
+class Product
+  attr_reader :id, :name, :price
+
+  def initialize(id:, name:, price:)
+    @id = id
+    @name = name
+    @price = price
+  end
+end
+
+class ProductRepository
   def initialize
     @products = {}
+  end
+
+  def find_product_by(id)
+    @products[id][:product]
+  end
+
+  def all
+    @products.values
+  end
+
+  def product_found?(id)
+    @products.key?(id)
+  end
+
+  def add(product:, total_quantity:)
+    @products[product.id] = { product:, total_quantity: }
+  end
+
+  def reduce_total_quantity(product_id:, quantity:)
+    @products[product_id][:total_quantity] -= quantity
+  end
+end
+
+class InventoryManager
+  def initialize
+    @product_repository = ProductRepository.new
+
     @warehouses = {}
     @transactions = []
   end
 
   def add_product(id, name, price, warehouse_id, quantity)
-    if @products[id]
+    if @product_repository.product_found?(id)
       puts 'Product already exists'
       return false
     end
 
-    @products[id] = {
-      name: name,
-      price: price,
-      total_quantity: 0
-    }
+    @product_repository.add(product:, total_quantity: quantity)
 
     @warehouses[warehouse_id] = {} unless @warehouses[warehouse_id]
 
@@ -24,8 +59,6 @@ class InventoryManager
     else
       @warehouses[warehouse_id][id] = quantity
     end
-
-    @products[id][:total_quantity] += quantity
 
     @transactions << {
       type: 'ADD',
@@ -72,7 +105,7 @@ class InventoryManager
   end
 
   def sell_product(product_id, warehouse_id, quantity, customer_name)
-    unless @products[product_id]
+    unless @product_repository.product_found?(id)
       puts 'Product not found'
       return nil
     end
@@ -90,7 +123,8 @@ class InventoryManager
     total_price = @products[product_id][:price] * quantity
 
     @warehouses[warehouse_id][product_id] -= quantity
-    @products[product_id][:total_quantity] -= quantity
+
+    @product_repository.reduce_total_quantity(product_id:, quantity:)
 
     @transactions << {
       type: 'SALE',
@@ -113,19 +147,26 @@ class InventoryManager
     report = "INVENTORY REPORT\n"
     report += "================\n\n"
 
-    @products.each do |id, product|
-      report += "Product: #{product[:name]}\n"
-      report += "  Total Quantity: #{product[:total_quantity]}\n"
-      report += "  Price: $#{product[:price]}\n"
-      report += "  Total Value: $#{product[:total_quantity] * product[:price]}\n"
-      report += "  Locations:\n"
+    @product_repository.reduce_total_quantity(product_id:, quantity:)
 
-      @warehouses.each do |warehouse_id, inventory|
-        report += "    #{warehouse_id}: #{inventory[id]} units\n" if inventory[id] && inventory[id] > 0
-      end
+    @product_repository.all.map do |product_detail|
+      product = product_detail[:product]
+      total_quantity = product_detail[:total_quantity]
 
-      report += "\n"
-    end
+      <<~CONTENT
+        Product: #{product.name}
+          Total Quantity: #{total_quantity}
+          Price: $#{product.price}
+          Total Value: $#{total_value(product, total_quantity)}
+          Locations:
+
+          #{
+            @warehouses.each do |warehouse_id, inventory|
+              report += "    #{warehouse_id}: #{inventory[id]} units\n" if inventory[id] && inventory[id] > 0
+            end
+          }
+      CONTENT
+    end.join("\n")
 
     report += "WAREHOUSE SUMMARY\n"
     report += "=================\n\n"
@@ -135,8 +176,10 @@ class InventoryManager
       total_items = 0
 
       inventory.each do |product_id, quantity|
-        if @products[product_id] && quantity > 0
-          total_value += @products[product_id][:price] * quantity
+        product = product_repository.find_product_by(product_id)
+
+        if product && quantity > 0
+          total_value += product.price * quantity
           total_items += quantity
         end
       end
@@ -152,9 +195,12 @@ class InventoryManager
   def get_low_stock_alert(threshold = 10)
     alerts = []
 
-    @products.each do |id, product|
+    product_repository.all.filter_map do |product_detail|
+      product = product_detail[:product]
+      quantity = product_detail[:total_quantity]
+
       if product[:total_quantity] < threshold
-        alerts << "LOW STOCK: #{product[:name]} - Only #{product[:total_quantity]} units remaining"
+        alerts << "LOW STOCK: #{product.name} - Only #{quantity} units remaining"
       end
     end
 
