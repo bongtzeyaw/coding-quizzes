@@ -1,21 +1,94 @@
+# frozen_string_literal: true
+
+class Service
+  class << self
+    def call
+      raise NotImplementedError, "#{self.class} must implement #call"
+    end
+
+    def check_health
+      raise NotImplementedError, "#{self.class} must implement #check_health"
+    end
+
+    def errors
+      raise NotImplementedError, "#{self.class} must implement #errors"
+    end
+  end
+end
+
+class ApiService < Service
+  class << self
+    def call
+      'API Response'
+    end
+
+    def check_health
+      rand > 0.1
+    end
+
+    def errors
+      [{ type: 'Timeout', message: 'Request timeout' }, { type: 'NotFound', message: 'Not found' }]
+    end
+  end
+end
+
+class DatabaseService < Service
+  class << self
+    def call
+      'DB Response'
+    end
+
+    def check_health
+      rand > 0.1
+    end
+
+    def errors
+      [{ type: 'ConnectionError', message: 'Connection failed' }]
+    end
+  end
+end
+
+class CacheService < Service
+  class << self
+    def call
+      'Cache Response'
+    end
+
+    def check_health
+      rand > 0.1
+    end
+
+    def errors
+      []
+    end
+  end
+end
+
+class ServiceDispatcher
+  SERVICE_MAP = {
+    api: ApiService,
+    database: DatabaseService,
+    cache: CacheService
+  }.freeze
+
+  class << self
+    def dispatch(service_name)
+      SERVICE_MAP[service_name.to_sym]
+    end
+  end
+end
+
 class MetricsCollector
   def collect_and_report(service_name, metric_type)
+    service_class = ServiceDispatcher.dispatch(service_name)
+    return nil unless service_class
+
     if metric_type == 'performance'
       start_time = Time.now
       cpu_before = get_cpu_usage
       memory_before = get_memory_usage
 
-      result = nil
-      case service_name
-      when 'api'
-        result = call_api_service
-      when 'database'
-        result = call_database_service
-      when 'cache'
-        result = call_cache_service
-      else
-        return nil
-      end
+      result = service_class.call
 
       end_time = Time.now
       cpu_after = get_cpu_usage
@@ -42,14 +115,7 @@ class MetricsCollector
       total_count = 10
 
       for i in 0..total_count - 1
-        case service_name
-        when 'api'
-          success_count += 1 if check_api_health
-        when 'database'
-          success_count += 1 if check_database_health
-        when 'cache'
-          success_count += 1 if check_cache_health
-        end
+        success_count += 1 if service_class.check_health
 
         sleep(1)
       end
@@ -71,16 +137,7 @@ class MetricsCollector
       report
 
     elsif metric_type == 'error_rate'
-      errors = []
-
-      case service_name
-      when 'api'
-        errors = get_api_errors
-      when 'database'
-        errors = get_database_errors
-      when 'cache'
-        errors = get_cache_errors
-      end
+      errors = service_class.errors
 
       error_count = errors.length
       error_types = {}
@@ -123,42 +180,6 @@ class MetricsCollector
 
   def get_memory_usage
     rand(100..1000)
-  end
-
-  def call_api_service
-    'API Response'
-  end
-
-  def call_database_service
-    'DB Response'
-  end
-
-  def call_cache_service
-    'Cache Response'
-  end
-
-  def check_api_health
-    rand > 0.1
-  end
-
-  def check_database_health
-    rand > 0.1
-  end
-
-  def check_cache_health
-    rand > 0.1
-  end
-
-  def get_api_errors
-    [{ type: 'Timeout', message: 'Request timeout' }, { type: 'NotFound', message: 'Not found' }]
-  end
-
-  def get_database_errors
-    [{ type: 'ConnectionError', message: 'Connection failed' }]
-  end
-
-  def get_cache_errors
-    []
   end
 
   def send_email(to, subject, body)
