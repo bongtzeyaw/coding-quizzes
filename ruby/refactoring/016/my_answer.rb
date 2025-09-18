@@ -131,17 +131,19 @@ class EventClient
   end
 end
 
-class ConflictChecker
+class EventUtilities
   class << self
-    def find_conflict(time_range:, existing_events: EventClient.all)
-      existing_events.find { |event| event_overlap?(event, time_range) }
-    end
-
-    private
-
     def event_overlap?(event, time_range)
       event_time_range = TimeRange.new(start_time: event.start_time, end_time: event.end_time)
       time_range.overlap?(event_time_range)
+    end
+  end
+end
+
+class ConflictChecker
+  class << self
+    def find_conflict(time_range:, existing_events: EventClient.all)
+      existing_events.find { |event| EventUtilities.event_overlap?(event, time_range) }
     end
   end
 end
@@ -172,7 +174,7 @@ class AvailableSlotFinder
     private
 
     def find_events(time_range)
-      EventClient.all.select { |event| time_range.includes?(event.start_time) }
+      EventClient.all.select { |event| EventUtilities.event_overlap?(event, time_range) }
                      .sort_by(&:start_time)
     end
 

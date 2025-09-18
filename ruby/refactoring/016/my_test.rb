@@ -106,6 +106,56 @@ class TestEventScheduler < Minitest::Test
     end
   end
 
+  def test_get_available_slots_returns_correct_slots_with_slot_starting_before_business_hours
+    event1 = Event.new
+    event1.title = 'Early Meeting'
+    event1.start_time = Time.new(2025, 9, 10, 7, 0)
+    event1.end_time = Time.new(2025, 9, 10, 11, 0)
+
+    event2 = Event.new
+    event2.title = 'Appointment'
+    event2.start_time = Time.new(2025, 9, 10, 15, 0)
+    event2.end_time = Time.new(2025, 9, 10, 16, 0)
+
+    all_events = [event1, event2]
+
+    Time.stub :now, @now do
+      Event.stub :all, all_events do
+        slots = @scheduler.get_available_slots('2025-09-10', 1.0)
+        expected_slots = [
+          { start: Time.new(2025, 9, 10, 11, 0), end: Time.new(2025, 9, 10, 15, 0) },
+          { start: Time.new(2025, 9, 10, 16, 0), end: Time.new(2025, 9, 10, 18, 0) }
+        ]
+        assert_equal expected_slots, slots
+      end
+    end
+  end
+
+  def test_get_available_slots_returns_correct_slots_with_slot_ending_after_business_hours
+    event1 = Event.new
+    event1.title = 'Meeting'
+    event1.start_time = Time.new(2025, 9, 10, 10, 0)
+    event1.end_time = Time.new(2025, 9, 10, 11, 0)
+
+    event2 = Event.new
+    event2.title = 'Late appointment'
+    event2.start_time = Time.new(2025, 9, 10, 17, 0)
+    event2.end_time = Time.new(2025, 9, 10, 19, 0)
+
+    all_events = [event1, event2]
+
+    Time.stub :now, @now do
+      Event.stub :all, all_events do
+        slots = @scheduler.get_available_slots('2025-09-10', 1.0)
+        expected_slots = [
+          { start: Time.new(2025, 9, 10, 9, 0), end: Time.new(2025, 9, 10, 10, 0) },
+          { start: Time.new(2025, 9, 10, 11, 0), end: Time.new(2025, 9, 10, 17, 0) }
+        ]
+        assert_equal expected_slots, slots
+      end
+    end
+  end
+
   def test_get_available_slots_returns_empty_when_no_slots_are_long_enough
     Time.stub :now, @now do
       Event.stub :all, @all_events do
