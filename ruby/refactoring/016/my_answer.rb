@@ -221,7 +221,6 @@ class EventScheduler
     return date_parse_result unless date_parse_result[:success]
 
     date = date_parse_result[:result]
-    return { error: 'Invalid date format' } unless date
 
     AvailableSlotFinder.find(date:, slot_duration_hours:)
   end
