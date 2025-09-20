@@ -262,7 +262,7 @@ class InventoryValidator
     raise NotImplementedError, "#{self.class} must implement #validate"
   end
 
-  protected
+  private
 
   def product_found_in_product_repository?(product_repository:, product_id:)
     product_repository.product_found?(product_id)
