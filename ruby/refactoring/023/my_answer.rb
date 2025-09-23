@@ -96,11 +96,72 @@ class MessageRegistry
   end
 end
 
+class Subscriber
+  attr_reader :name
+  attr_accessor :message_count, :error_count
+
+  def initialize(name:, filter:, handler:)
+    @name = name
+    @filter = filter
+    @handler = handler
+    @subscribed_at = Time.now.utc
+    @message_count = 0
+    @error_count = 0
+  end
+
+  def filter_pass_for_message?(message)
+    return true unless @filter
+
+    @filter.all? { |key, value| message.attributes[key] == value }
+  end
+
+  def handle(message)
+    @handler.call(message.content, message.attributes)
+  end
+end
+
+class SubscriberRegistry
+  def initialize
+    @subscribers = {}
+  end
+
+  def find(topic_name:, subscriber_name:)
+    subscriber = @subscribers[topic_name]&.find { |subscriber| subscriber.name == subscriber_name }
+    raise "Subscriber not found: #{subscriber_name} for topic: #{topic_name}" unless subscriber
+
+    subscriber
+  end
+
+  def register_topic(topic_name:)
+    @subscribers[topic_name] = []
+  end
+
+  def register_subscriber_for_topic(topic_name:, subscriber:)
+    @subscribers[topic_name] << subscriber
+  end
+
+  def subscriber_exist?(topic_name:, subscriber_name:)
+    @subscribers[topic_name]&.any? { |subscriber| subscriber.name == subscriber_name } || false
+  end
+
+  def filter_subscribers_for_topic(topic_name:, message:)
+    (@subscribers[topic_name] || []).select { |subscriber| subscriber.filter_pass_for_message?(message) }
+  end
+
+  def delete_subscriber_for_topic(topic_name:, subscriber_name:)
+    @subscribers[topic_name].delete_if { |subscriber| subscriber.name == subscriber_name }
+  end
+
+  def count_subscribers_for_topic(topic_name:)
+    @subscribers[topic_name]&.length || 0
+  end
+end
+
 class MessageQueue
   def initialize
     @topic_registry = TopicRegistry.new
     @message_registry = MessageRegistry.new
-    @subscribers = {}
+    @subscriber_registry = SubscriberRegistry.new
     @failed_messages = []
     @message_id = 0
   end
@@ -119,7 +180,7 @@ class MessageQueue
 
     @topic_registry.register(topic)
     @message_registry.register(topic_name:)
-    @subscribers[topic_name] = []
+    @subscriber_registry.register_topic(topic_name:)
 
     true
   end
@@ -136,14 +197,13 @@ class MessageQueue
       return false
     end
 
-    @subscribers[topic_name] << {
+    subscriber = Subscriber.new(
       name: subscriber_name,
       filter: filter,
-      handler: handler,
-      subscribed_at: Time.now,
-      message_count: 0,
-      error_count: 0
-    }
+      handler: handler
+    )
+
+    @subscriber_registry.register_subscriber_for_topic(topic_name:, subscriber:)
 
     true
   end
@@ -168,12 +228,13 @@ class MessageQueue
     @message_registry.create_entry(topic:, message:)
     @message_registry.cleanup_expired(topic_name:, retention_period: topic.retention_period)
 
+    target_subscribers = @subscriber_registry.filter_subscribers_for_topic(topic_name:, message:)
     delivered_count = 0
-    @subscribers[topic_name].each do |subscriber|
-      if subscriber[:filter]
+    target_subscribers.each do |subscriber|
+      if subscriber.filter
         matched = true
-        subscriber[:filter].each do |key, value|
-          if message_data[:attributes][key] != value
+        subscriber.filter.each do |key, value|
+          if message.attributes[key] != value
             matched = false
             break
           end
@@ -185,16 +246,16 @@ class MessageQueue
         if options[:async]
           Thread.new do
             sleep(0.1 * (10 - message.priority))
-            subscriber[:handler].call(message.content, message.attributes)
+            subscriber.handler.call(message.content, message.attributes)
           end
         else
-          subscriber[:handler].call(message.content, message.attributes)
+          subscriber.handler.call(message.content, message.attributes)
         end
 
-        subscriber[:message_count] += 1
+        subscriber.message_count += 1
         delivered_count += 1
       rescue StandardError => e
-        subscriber[:error_count] += 1
+        subscriber.error_count += 1
 
         if message.retry_count < topic.max_retries
           message.retry_count += 1
@@ -213,7 +274,7 @@ class MessageQueue
           }
         end
 
-        puts "Error delivering to #{subscriber[:name]}: #{e.message}"
+        puts "Error delivering to #{subscriber.name}: #{e.message}"
       end
     end
 
@@ -223,7 +284,7 @@ class MessageQueue
   def get_messages(topic_name, subscriber_name, limit = 10)
     return [] unless @topic_registry.topic_exist?(topic_name)
 
-    subscriber = @subscribers[topic_name].find { |s| s[:name] == subscriber_name }
+    target_subscriber = @subscriber_registry.find(topic_name:, subscriber_name:)
     return [] unless subscriber
 
     @message_registry.filter_messages_for_topic(topic_name:, subscriber: target_subscriber, limit:)
@@ -232,7 +293,7 @@ class MessageQueue
   def unsubscribe(topic_name, subscriber_name)
     return false unless @topic_registry.topic_exist?(topic_name)
 
-    @subscribers[topic_name].delete_if { |s| s[:name] == subscriber_name }
+    @subscriber_registry.delete_subscriber_for_topic(topic_name:, subscriber_name:)
     true
   end
 
@@ -242,7 +303,7 @@ class MessageQueue
     @topic_registry.all.each do |topic_name, topic_info|
       stats[topic_name] = {
         message_count: topic_info[:message_count],
-        subscriber_count: @subscribers[topic_name].length,
+        subscriber_count: @subscriber_registry.count_subscribers_for_topic(topic_name:),
         failed_count: @failed_messages.count { |f| f[:message][:topic] == topic_name }
       }
     end
