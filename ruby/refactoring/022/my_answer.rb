@@ -113,6 +113,17 @@ class CacheHitMissCounter
   end
 end
 
+class CacheStatistics
+  def display_summary(cache_storage:, cache_hit_miss_counter:)
+    puts 'Cache Statistics:'
+    puts "  Size: #{cache_storage.size}/#{cache_storage.max_size}"
+    puts "  Hits: #{cache_hit_miss_counter.hit_count}"
+    puts "  Misses: #{cache_hit_miss_counter.miss_count}"
+    puts "  Hit Rate: #{cache_hit_miss_counter.hit_rate}%"
+    puts "  Estimated Memory: #{cache_storage.memory_usage} bytes"
+  end
+end
+
 class CacheSystem
   def initialize(max_size = 100, ttl = 3600)
     @cache_storage = CacheStorage.new
@@ -173,22 +184,10 @@ class CacheSystem
   end
 
   def stats
-    total_requests = @hit_count + @miss_count
-    hit_rate = total_requests > 0 ? (@hit_count.to_f / total_requests * 100).round(2) : 0
-
-    puts 'Cache Statistics:'
-    puts "  Size: #{@cache.size}/#{@max_size}"
-    puts "  Hits: #{@hit_count}"
-    puts "  Misses: #{@miss_count}"
-    puts "  Hit Rate: #{hit_rate}%"
-
-    memory_usage = 0
-    @cache.each do |k, v|
-      memory_usage += k.to_s.length
-      memory_usage += v.to_s.length
-    end
-
-    puts "  Estimated Memory: #{memory_usage} bytes"
+    @cache_statistics.display_summary(
+      cache_storage: @cache_storage,
+      cache_hit_miss_counter: @cache_hit_miss_counter
+    )
   end
 
   def get_multiple(keys)
