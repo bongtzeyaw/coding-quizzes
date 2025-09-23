@@ -157,6 +157,97 @@ class SubscriberRegistry
   end
 end
 
+class Validator
+  private
+
+  def failure_result(info)
+    { success: false, info: info }
+  end
+
+  def topic_exists_in_topic_registry?(topic_registry, topic_name)
+    topic_registry.topic_exist?(topic_name)
+  end
+
+  def subscriber_exists_in_subscriber_registry?(subscriber_registry, topic_name, subscriber_name)
+    subscriber_registry.subscriber_exist?(topic_name:, subscriber_name:)
+  end
+end
+
+class TopicCreationValidator < Validator
+  def initialize(topic_registry:)
+    @topic_registry = topic_registry
+  end
+
+  def validate(topic_name)
+    return failure_result("Topic already exists: #{topic_name}") if topic_exists_in_topic_registry?(@topic_registry,
+                                                                                                    topic_name)
+
+    { success: true }
+  end
+end
+
+class SubscriptionValidator < Validator
+  def initialize(topic_registry:, subscriber_registry:)
+    @topic_registry = topic_registry
+    @subscriber_registry = subscriber_registry
+  end
+
+  def validate(topic_name, subscriber_name)
+    return failure_result("Topic not found: #{topic_name}") unless topic_exists_in_topic_registry?(@topic_registry,
+                                                                                                   topic_name)
+
+    return failure_result("Subscriber already exists: #{subscriber_name}") if subscriber_exists_in_subscriber_registry?(
+      @subscriber_registry, topic_name, subscriber_name
+    )
+
+    { success: true }
+  end
+end
+
+class TopicPublicationValidator < Validator
+  def initialize(topic_registry:)
+    @topic_registry = topic_registry
+  end
+
+  def validate(topic_name)
+    return failure_result("Topic not found: #{topic_name}") unless topic_exists_in_topic_registry?(@topic_registry,
+                                                                                                   topic_name)
+
+    { success: true }
+  end
+end
+
+class MessagesObtentionValidator < Validator
+  def initialize(topic_registry:, subscriber_registry:)
+    @topic_registry = topic_registry
+    @subscriber_registry = subscriber_registry
+  end
+
+  def validate(topic_name, subscriber_name)
+    return failure_result("Topic not found: #{topic_name}") unless topic_exists_in_topic_registry?(@topic_registry,
+                                                                                                   topic_name)
+
+    return failure_result("Subscriber not found: #{subscriber_name}") unless subscriber_exists_in_subscriber_registry?(
+      @subscriber_registry, topic_name, subscriber_name
+    )
+
+    { success: true }
+  end
+end
+
+class UnsubscriptionValidator < Validator
+  def initialize(topic_registry:)
+    @topic_registry = topic_registry
+  end
+
+  def validate(topic_name)
+    return failure_result("Topic not found: #{topic_name}") unless topic_exists_in_topic_registry?(@topic_registry,
+                                                                                                   topic_name)
+
+    { success: true }
+  end
+end
+
 class MessageQueue
   def initialize
     @topic_registry = TopicRegistry.new
@@ -167,8 +258,11 @@ class MessageQueue
   end
 
   def create_topic(topic_name, options = {})
-    if @topic_registry.topic_exist?(topic_name)
-      puts "Topic already exists: #{topic_name}"
+    validator = TopicCreationValidator.new(topic_registry: @topic_registry)
+    validation_result = validator.validate(topic_name)
+
+    unless validation_result[:success]
+      puts validation_result[:info]
       return false
     end
 
@@ -186,8 +280,11 @@ class MessageQueue
   end
 
   def subscribe(topic_name, subscriber_name, filter = nil, &handler)
-    unless @topic_registry.topic_exist?(topic_name)
-      puts "Topic not found: #{topic_name}"
+    validator = SubscriptionValidator.new(topic_registry: @topic_registry, subscriber_registry: @subscriber_registry)
+    validation_result = validator.validate(topic_name, subscriber_name)
+
+    unless validation_result[:success]
+      puts validation_result[:info]
       return false
     end
 
@@ -209,8 +306,11 @@ class MessageQueue
   end
 
   def publish(topic_name, message, options = {})
-    unless @topic_registry.topic_exist?(topic_name)
-      puts "Topic not found: #{topic_name}"
+    validator = TopicPublicationValidator.new(topic_registry: @topic_registry)
+    validation_result = validator.validate(topic_name)
+
+    unless validation_result[:success]
+      puts validation_result[:info]
       return nil
     end
 
@@ -282,16 +382,21 @@ class MessageQueue
   end
 
   def get_messages(topic_name, subscriber_name, limit = 10)
-    return [] unless @topic_registry.topic_exist?(topic_name)
+    validator = MessagesObtentionValidator.new(topic_registry: @topic_registry,
+                                               subscriber_registry: @subscriber_registry)
+    validation_result = validator.validate(topic_name, subscriber_name)
+
+    return [] unless validation_result[:success]
 
     target_subscriber = @subscriber_registry.find(topic_name:, subscriber_name:)
-    return [] unless subscriber
-
     @message_registry.filter_messages_for_topic(topic_name:, subscriber: target_subscriber, limit:)
   end
 
   def unsubscribe(topic_name, subscriber_name)
-    return false unless @topic_registry.topic_exist?(topic_name)
+    validator = UnsubscriptionValidator.new(topic_registry: @topic_registry)
+    validation_result = validator.validate(topic_name)
+
+    return false unless validation_result[:success]
 
     @subscriber_registry.delete_subscriber_for_topic(topic_name:, subscriber_name:)
     true
