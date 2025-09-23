@@ -71,6 +71,7 @@ class MessageRegistry
   def initialize
     @messages = {}
     @message_id = 0
+    @mutex = Mutex.new
   end
 
   def register(topic_name:)
@@ -78,8 +79,10 @@ class MessageRegistry
   end
 
   def create_entry(topic:, message:)
-    @messages[topic.name] << message
-    topic.message_count += 1
+    @mutex.synchronize do
+      @messages[topic.name] << message
+      topic.message_count += 1
+    end
   end
 
   def generate_id
@@ -87,7 +90,9 @@ class MessageRegistry
   end
 
   def cleanup_expired(topic_name:, retention_period:)
-    @messages[topic_name].delete_if { |message| message.expired?(retention_period) }
+    @mutex.synchronize do
+      @messages[topic_name].delete_if { |message| message.expired?(retention_period) }
+    end
   end
 
   def filter_messages_for_topic(topic_name:, subscriber:, limit:)
@@ -123,6 +128,7 @@ end
 class SubscriberRegistry
   def initialize
     @subscribers = {}
+    @mutex = Mutex.new
   end
 
   def find(topic_name:, subscriber_name:)
@@ -137,7 +143,9 @@ class SubscriberRegistry
   end
 
   def register_subscriber_for_topic(topic_name:, subscriber:)
-    @subscribers[topic_name] << subscriber
+    @mutex.synchronize do
+      @subscribers[topic_name] << subscriber
+    end
   end
 
   def subscriber_exist?(topic_name:, subscriber_name:)
@@ -149,7 +157,9 @@ class SubscriberRegistry
   end
 
   def delete_subscriber_for_topic(topic_name:, subscriber_name:)
-    @subscribers[topic_name].delete_if { |subscriber| subscriber.name == subscriber_name }
+    @mutex.synchronize do
+      @subscribers[topic_name].delete_if { |subscriber| subscriber.name == subscriber_name }
+    end
   end
 
   def count_subscribers_for_topic(topic_name:)
@@ -353,6 +363,7 @@ end
 class DeliveryService
   def initialize
     @failed_messages = []
+    @mutex = Mutex.new
   end
 
   def deliver(message:, subscribers:, options: {})
@@ -374,7 +385,9 @@ class DeliveryService
   private
 
   def handle_failure(result)
-    @failed_messages << result[:failed_message]
+    @mutex.synchronize do
+      @failed_messages << result[:failed_message]
+    end
   end
 end
 
