@@ -41,11 +41,66 @@ class TopicRegistry
   end
 end
 
+class Message
+  DEFAULT_PRIORITY = 5
+
+  attr_reader :id, :content, :priority, :attributes, :published_at, :topic
+  attr_writer :last_error
+  attr_accessor :retry_count
+
+  def initialize(id:, topic:, content:, priority:, attributes:)
+    @id = id
+    @topic = topic
+    @content = content
+    @priority = priority || DEFAULT_PRIORITY
+    @published_at = Time.now.utc
+    @attributes = attributes || {}
+    @retry_count = 0
+  end
+
+  def expired?(retention_period)
+    (Time.now.utc - @published_at) > retention_period
+  end
+
+  def under_retry_limit?
+    @retry_count < @topic.max_retries
+  end
+end
+
+class MessageRegistry
+  def initialize
+    @messages = {}
+    @message_id = 0
+  end
+
+  def register(topic_name:)
+    @messages[topic_name] = []
+  end
+
+  def create_entry(topic:, message:)
+    @messages[topic.name] << message
+    topic.message_count += 1
+  end
+
+  def generate_id
+    @message_id += 1
+  end
+
+  def cleanup_expired(topic_name:, retention_period:)
+    @messages[topic_name].delete_if { |message| message.expired?(retention_period) }
+  end
+
+  def filter_messages_for_topic(topic_name:, subscriber:, limit:)
+    filtered_messages = (@messages[topic_name] || []).select { |message| subscriber.filter_pass_for_message?(message) }
+    filtered_messages.sort_by(&:published_at).reverse.take(limit)
+  end
+end
+
 class MessageQueue
   def initialize
     @topic_registry = TopicRegistry.new
+    @message_registry = MessageRegistry.new
     @subscribers = {}
-    @messages = {}
     @failed_messages = []
     @message_id = 0
   end
@@ -63,8 +118,7 @@ class MessageQueue
     )
 
     @topic_registry.register(topic)
-
-    @messages[topic_name] = []
+    @message_registry.register(topic_name:)
     @subscribers[topic_name] = []
 
     true
@@ -100,25 +154,19 @@ class MessageQueue
       return nil
     end
 
-    @message_id += 1
+    message_id = @message_registry.generate_id
+    topic = @topic_registry.find(topic_name)
 
-    message_data = {
-      id: @message_id,
-      topic: topic_name,
+    message = Message.new(
+      id: message_id,
+      topic: topic,
       content: message,
-      priority: options[:priority] || 5,
-      published_at: Time.now,
-      attributes: options[:attributes] || {},
-      retry_count: 0
-    }
+      priority: options[:priority],
+      attributes: options[:attributes]
+    )
 
-    @messages[topic_name] << message_data
-    @topic_registry.find(topic_name).message_count += 1
-
-    retention = @topic_registry.find(topic_name).retention_period
-    @messages[topic_name].delete_if do |msg|
-      (Time.now - msg[:published_at]) > retention
-    end
+    @message_registry.create_entry(topic:, message:)
+    @message_registry.cleanup_expired(topic_name:, retention_period: topic.retention_period)
 
     delivered_count = 0
     @subscribers[topic_name].each do |subscriber|
@@ -136,11 +184,11 @@ class MessageQueue
       begin
         if options[:async]
           Thread.new do
-            sleep(0.1 * (10 - message_data[:priority]))
-            subscriber[:handler].call(message_data[:content], message_data[:attributes])
+            sleep(0.1 * (10 - message.priority))
+            subscriber[:handler].call(message.content, message.attributes)
           end
         else
-          subscriber[:handler].call(message_data[:content], message_data[:attributes])
+          subscriber[:handler].call(message.content, message.attributes)
         end
 
         subscriber[:message_count] += 1
@@ -148,17 +196,17 @@ class MessageQueue
       rescue StandardError => e
         subscriber[:error_count] += 1
 
-        if message_data[:retry_count] < @topics[topic_name][:max_retries]
-          message_data[:retry_count] += 1
-          message_data[:last_error] = e.message
+        if message.retry_count < topic.max_retries
+          message.retry_count += 1
+          message.last_error = e.message
 
           Thread.new do
-            sleep(message_data[:retry_count] * 2)
+            sleep(message.retry_count * 2)
             publish(topic_name, message, options)
           end
         else
           @failed_messages << {
-            message: message_data,
+            message:,
             subscriber: subscriber[:name],
             error: e.message,
             failed_at: Time.now
@@ -178,23 +226,7 @@ class MessageQueue
     subscriber = @subscribers[topic_name].find { |s| s[:name] == subscriber_name }
     return [] unless subscriber
 
-    filtered_messages = []
-    @messages[topic_name].each do |msg|
-      if subscriber[:filter]
-        matched = true
-        subscriber[:filter].each do |key, value|
-          if msg[:attributes][key] != value
-            matched = false
-            break
-          end
-        end
-        next unless matched
-      end
-
-      filtered_messages << msg
-    end
-
-    filtered_messages.sort_by { |m| m[:published_at] }.reverse.take(limit)
+    @message_registry.filter_messages_for_topic(topic_name:, subscriber: target_subscriber, limit:)
   end
 
   def unsubscribe(topic_name, subscriber_name)
