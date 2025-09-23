@@ -378,6 +378,24 @@ class DeliveryService
   end
 end
 
+class StatisticsCollector
+  def initialize(topic_registry:, subscriber_registry:, delivery_service:)
+    @topic_registry = topic_registry
+    @subscriber_registry = subscriber_registry
+    @delivery_service = delivery_service
+  end
+
+  def collect
+    @topic_registry.all.each_with_object({}) do |topic, stats|
+      stats[topic.name] = {
+        message_count: topic.message_count,
+        subscriber_count: @subscriber_registry.count_subscribers_for_topic(topic_name: topic.name),
+        failed_count: @delivery_service.count_failed_messages_for_topic(topic_name: topic.name)
+      }
+    end
+  end
+end
+
 class MessageQueue
   def initialize
     @topic_registry = TopicRegistry.new
@@ -482,16 +500,10 @@ class MessageQueue
   end
 
   def get_stats
-    stats = {}
-
-    @topic_registry.all.each do |topic_name, topic_info|
-      stats[topic_name] = {
-        message_count: topic_info[:message_count],
-        subscriber_count: @subscriber_registry.count_subscribers_for_topic(topic_name:),
-        failed_count: @failed_messages.count { |f| f[:message][:topic] == topic_name }
-      }
-    end
-
-    stats
+    StatisticsCollector.new(
+      topic_registry: @topic_registry,
+      subscriber_registry: @subscriber_registry,
+      delivery_service: @delivery_service
+    ).collect
   end
 end
