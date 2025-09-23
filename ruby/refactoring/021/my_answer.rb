@@ -1,5 +1,109 @@
 # frozen_string_literal: true
 
+class DataValidator
+  def initialize(data)
+    @data = data
+  end
+
+  def validate
+    raise NotImplementedError, "#{self.class} must implement #validate"
+  end
+end
+
+class EmailValidator < DataValidator
+  def validate
+    raise 'Invalid email address' if @data[:to].nil? || @data[:to].empty?
+  end
+end
+
+class HttpRequestValidator < DataValidator
+  def validate
+    raise 'Invalid URL' unless @data[:url].start_with?('http')
+  end
+end
+
+class DataProcessingValidator < DataValidator
+  def validate
+    raise 'Invalid input data' if @data[:input].nil? || @data[:input].empty?
+  end
+end
+
+class ReportGenerationValidator < DataValidator
+  def validate
+    raise 'Invalid report type' if @data[:report_type].nil? || @data[:report_type].empty?
+  end
+end
+
+class TaskHandler
+  def handle(data)
+    raise NotImplementedError, "#{self.class} must implement the #handle"
+  end
+end
+
+class EmailHandler < TaskHandler
+  def handle(data)
+    validator = EmailValidator.new(data)
+    validator.validate
+
+    puts "Sending email to #{data[:to]}"
+    sleep(5)
+
+    'Email sent'
+  end
+end
+
+class HttpRequestHandler < TaskHandler
+  def handle(data)
+    validator = HttpRequestValidator.new(data)
+    validator.validate
+
+    puts "Making HTTP request to #{data[:url]}"
+    sleep(2)
+
+    'Response: 200 OK'
+  end
+end
+
+class DataProcessingHandler < TaskHandler
+  def handle(data)
+    validator = DataProcessingValidator.new(data)
+    validator.validate
+
+    puts "Processing data: #{data[:input]}"
+    sleep(1.5)
+
+    "Processed: #{data[:input].upcase}"
+  end
+end
+
+class ReportGenerationHandler < TaskHandler
+  def handle(data)
+    validator = ReportGenerationValidator.new(data)
+    validator.validate
+
+    puts "Generating #{data[:report_type]} report"
+    sleep(1.5)
+
+    "Report generated: #{data[:report_type]}_report.pdf"
+  end
+end
+
+class TaskHandlerDispatcher
+  HANDLER_MAP = {
+    email: EmailHandler.new,
+    http_request: HttpRequestHandler.new,
+    data_processing: DataProcessingHandler.new,
+    report_generation: ReportGenerationHandler.new
+  }.freeze
+
+  def self.find(task_type)
+    handler = HANDLER_MAP[task_type.to_sym]
+    raise 'Unknown task type' unless handler
+
+    handler
+  end
+end
+
 class Task
   attr_reader :id, :type, :data, :priority, :retry_count, :attempts, :status 
 
@@ -102,50 +206,8 @@ class TasksExecutor
   def execute(task)
     task.record_start
 
-    result = nil
-
-    case task.type
-    when 'email'
-      puts "Sending email to #{task.data[:to]}"
-      raise 'Invalid email address' if task.data[:to].nil? || task.data[:to].empty?
-
-      sleep(1)
-      result = 'Email sent'
-
-    when 'http_request'
-      puts "Making HTTP request to #{task.data[:url]}"
-      raise 'Invalid URL' unless task.data[:url].start_with?('http')
-
-      sleep(2)
-      result = 'Response: 200 OK'
-
-    when 'data_processing'
-      puts "Processing data: #{task.data[:input]}"
-      raise 'No input data' if task.data[:input].nil?
-
-      processed = task.data[:input].upcase
-      sleep(0.5)
-      result = "Processed: #{processed}"
-
-    when 'report_generation'
-      puts "Generating report: #{task.data[:report_type]}"
-      raise 'Invalid report type' unless %w[daily weekly monthly].include?(task.data[:report_type])
-
-      sleep(3)
-      result = "Report generated: #{task.data[:report_type]}_report.pdf"
-
-    else
-      raise "Unknown task type: #{task.type}"
-    end
-
-    task.status = 'completed'
-    task.completed_at = Time.now
-    task.result = result
-    task.duration = task.completed_at - task.started_at
-
-    @completed_tasks << task
-
-    task.data[:on_success].call(result) if task.data[:on_success]
+    handler = handler(task.type)
+    result = handler.handle(task.data)
 
     task.record_completion(result)
 
