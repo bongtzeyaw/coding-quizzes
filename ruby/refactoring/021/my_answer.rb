@@ -19,6 +19,37 @@ class Task
     initialize_retry_attr
   end
 
+  def record_start
+    @status = 'running'
+    @started_at = Time.now.utc
+  end
+
+  def record_completion(result)
+    @status = 'completed'
+    @completed_at = Time.now.utc
+    @result = result
+    @duration = @completed_at - @started_at
+  end
+
+  def record_error(error)
+    @attempts += 1
+    @last_error = error.message
+    @failed_at = Time.now.utc
+  end
+
+  def record_failure
+    @status = 'failed'
+  end
+
+  def record_retry
+    @status = 'pending'
+    @retry_after = Time.now.utc + (@attempts * 5)
+  end
+
+  def retry?
+    @attempts < @retry_count
+  end
+
   private
 
   def initialize_start_attr
@@ -45,6 +76,116 @@ class Task
   end
 end
 
+class TasksExecutor
+  def initialize
+    @completed_tasks = []
+    @failed_tasks = []
+    @running = true
+  end
+
+  def find_executed_task_by(id)
+    (@completed_tasks + @failed_tasks).find { |task| task.id == id }
+  end
+
+  def setup
+    @running = true
+  end
+
+  def teardown
+    @running = false
+  end
+
+  def running?
+    @running
+  end
+
+  def execute(task)
+    task.record_start
+
+    result = nil
+
+    case task.type
+    when 'email'
+      puts "Sending email to #{task.data[:to]}"
+      raise 'Invalid email address' if task.data[:to].nil? || task.data[:to].empty?
+
+      sleep(1)
+      result = 'Email sent'
+
+    when 'http_request'
+      puts "Making HTTP request to #{task.data[:url]}"
+      raise 'Invalid URL' unless task.data[:url].start_with?('http')
+
+      sleep(2)
+      result = 'Response: 200 OK'
+
+    when 'data_processing'
+      puts "Processing data: #{task.data[:input]}"
+      raise 'No input data' if task.data[:input].nil?
+
+      processed = task.data[:input].upcase
+      sleep(0.5)
+      result = "Processed: #{processed}"
+
+    when 'report_generation'
+      puts "Generating report: #{task.data[:report_type]}"
+      raise 'Invalid report type' unless %w[daily weekly monthly].include?(task.data[:report_type])
+
+      sleep(3)
+      result = "Report generated: #{task.data[:report_type]}_report.pdf"
+
+    else
+      raise "Unknown task type: #{task.type}"
+    end
+
+    task.status = 'completed'
+    task.completed_at = Time.now
+    task.result = result
+    task.duration = task.completed_at - task.started_at
+
+    @completed_tasks << task
+
+    task.data[:on_success].call(result) if task.data[:on_success]
+
+    task.record_completion(result)
+
+    handle_completion(task, result)
+
+    result
+  end
+
+  def completed_count
+    @completed_tasks.length
+  end
+
+  def failed_count
+    @failed_tasks.length
+  end
+
+  def add_failed_task(task)
+    @failed_tasks << task
+  end
+
+  private
+
+  def handler(task_type)
+    TaskHandlerDispatcher.find(task_type)
+  end
+
+  def add_completed_task(task)
+    @completed_tasks << task
+  end
+
+  def execute_success_callback(task, result)
+    task.data[:on_success]&.call(result)
+  end
+
+  def handle_completion(task, result)
+    add_completed_task(task)
+    execute_success_callback(task, result)
+  end
+end
+
 class PriorityQueue
   def initialize
     @tasks = []
@@ -59,9 +200,7 @@ end
 class TaskQueue
   def initialize
     @priority_queue = PriorityQueue.new
-    @failed_tasks = []
-    @completed_tasks = []
-    @running = false
+    @tasks_executor = TasksExecutor.new
   end
 
   def add_task(type, data, priority = 5, retry_count = 3)
@@ -81,90 +220,23 @@ class TaskQueue
   end
 
   def process_tasks
-    @running = true
+    @tasks_executor.setup
 
-    while @running && @tasks.length > 0
-      task = @tasks.shift
+    while @tasks_executor.running? && !@priority_queue.empty?
+      task = @priority_queue.dequeue
 
-      task[:status] = 'running'
-      task[:started_at] = Time.now
-
-      begin
-        result = nil
-
-        case task[:type]
-        when 'email'
-          puts "Sending email to #{task[:data][:to]}"
-          raise 'Invalid email address' if task[:data][:to].nil? || task[:data][:to].empty?
-
-          sleep(1)
-          result = 'Email sent'
-
-        when 'http_request'
-          puts "Making HTTP request to #{task[:data][:url]}"
-          raise 'Invalid URL' unless task[:data][:url].start_with?('http')
-
-          sleep(2)
-          result = 'Response: 200 OK'
-
-        when 'data_processing'
-          puts "Processing data: #{task[:data][:input]}"
-          raise 'No input data' if task[:data][:input].nil?
-
-          processed = task[:data][:input].upcase
-          sleep(0.5)
-          result = "Processed: #{processed}"
-
-        when 'report_generation'
-          puts "Generating report: #{task[:data][:report_type]}"
-          raise 'Invalid report type' unless %w[daily weekly monthly].include?(task[:data][:report_type])
-
-          sleep(3)
-          result = "Report generated: #{task[:data][:report_type]}_report.pdf"
-
-        else
-          raise "Unknown task type: #{task[:type]}"
-        end
-
-        task[:status] = 'completed'
-        task[:completed_at] = Time.now
-        task[:result] = result
-        task[:duration] = task[:completed_at] - task[:started_at]
-
-        @completed_tasks << task
-
-        task[:data][:on_success].call(result) if task[:data][:on_success]
-      rescue StandardError => e
-        task[:attempts] += 1
-        task[:last_error] = e.message
-        task[:failed_at] = Time.now
-
-        if task[:attempts] < task[:retry_count]
-          task[:status] = 'pending'
-          task[:retry_after] = Time.now + (task[:attempts] * 5)
-
-          @tasks.unshift(task)
-
-          puts "Task #{task[:id]} failed, retrying (#{task[:attempts]}/#{task[:retry_count]})"
-        else
-          task[:status] = 'failed'
-          @failed_tasks << task
-
-          # コールバック実行
-          task[:data][:on_failure].call(e.message) if task[:data][:on_failure]
-
-          puts "Task #{task[:id]} failed permanently: #{e.message}"
-        end
+      with_error_handling(task) do
+        @tasks_executor.execute(task)
       end
 
       sleep(0.1)
     end
 
-    @running = false
+    @tasks_executor.teardown
   end
 
   def stop
-    @running = false
+    @tasks_executor.teardown
   end
 
   def get_status
@@ -198,7 +270,30 @@ class TaskQueue
 
   private
 
-  def generate_id
-    "task_#{Time.now.to_i}_#{rand(1000)}"
+  def retry_task(task)
+    task.record_retry
+    @queue.enqueue(task)
+
+    puts "Task #{task.id} failed, retrying (#{task.attempts}/#{task.retry_count})"
+  end
+
+  def execute_failure_callback(task, error)
+    task.data[:on_failure]&.call(error.message)
+  end
+
+  def fail_task(task, error)
+    task.record_failure
+    @executor.add_failed_task(task)
+    execute_failure_callback(task, error)
+
+    puts "Task #{task.id} failed permanently: #{error.message}"
+  end
+
+  def with_error_handling(task)
+    yield
+  rescue StandardError => error
+    task.record_error(error)
+
+    task.retry? ? retry_task(task) : fail_task(task, error)
   end
 end
