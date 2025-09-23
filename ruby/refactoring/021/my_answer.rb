@@ -253,9 +253,77 @@ class PriorityQueue
     @tasks = []
   end
 
+  def find_task_in_queue_by(id)
+    @tasks.find { |task| task.id == id }
+  end
+
   def enqueue(task)
     insert_position = @tasks.bsearch_index { |task_in_queue| task.priority >= task_in_queue.priority } || @tasks.length
     @tasks.insert(insert_position, task)
+  end
+
+  def dequeue
+    @tasks.shift
+  end
+
+  def pending_count
+    @tasks.count { |task| task.status == 'pending' }
+  end
+
+  def empty?
+    @tasks.empty?
+  end
+end
+
+class QueueTasksProcessor
+  def initialize(queue:, executor:)
+    @queue = queue
+    @executor = executor
+  end
+
+  def process_all_tasks
+    @executor.setup
+
+    while @executor.running? && !@queue.empty?
+      task = @queue.dequeue
+
+      with_error_handling(task) do
+        @executor.execute(task)
+      end
+
+      sleep(0.1)
+    end
+
+    @executor.teardown
+  end
+
+  private
+
+  def retry_task(task)
+    task.record_retry
+    @queue.enqueue(task)
+
+    puts "Task #{task.id} failed, retrying (#{task.attempts}/#{task.retry_count})"
+  end
+
+  def execute_failure_callback(task, error)
+    task.data[:on_failure]&.call(error.message)
+  end
+
+  def fail_task(task, error)
+    task.record_failure
+    @executor.add_failed_task(task)
+    execute_failure_callback(task, error)
+
+    puts "Task #{task.id} failed permanently: #{error.message}"
+  end
+
+  def with_error_handling(task)
+    yield
+  rescue StandardError => error
+    task.record_error(error)
+
+    task.retry? ? retry_task(task) : fail_task(task, error)
   end
 end
 
@@ -282,19 +350,10 @@ class TaskQueue
   end
 
   def process_tasks
-    @tasks_executor.setup
-
-    while @tasks_executor.running? && !@priority_queue.empty?
-      task = @priority_queue.dequeue
-
-      with_error_handling(task) do
-        @tasks_executor.execute(task)
-      end
-
-      sleep(0.1)
-    end
-
-    @tasks_executor.teardown
+    QueueTasksProcessor.new(
+      queue: @priority_queue,
+      executor: @tasks_executor
+    ).process_all_tasks
   end
 
   def stop
@@ -328,34 +387,5 @@ class TaskQueue
       duration: task[:duration],
       error: task[:last_error]
     }
-  end
-
-  private
-
-  def retry_task(task)
-    task.record_retry
-    @queue.enqueue(task)
-
-    puts "Task #{task.id} failed, retrying (#{task.attempts}/#{task.retry_count})"
-  end
-
-  def execute_failure_callback(task, error)
-    task.data[:on_failure]&.call(error.message)
-  end
-
-  def fail_task(task, error)
-    task.record_failure
-    @executor.add_failed_task(task)
-    execute_failure_callback(task, error)
-
-    puts "Task #{task.id} failed permanently: #{error.message}"
-  end
-
-  def with_error_handling(task)
-    yield
-  rescue StandardError => error
-    task.record_error(error)
-
-    task.retry? ? retry_task(task) : fail_task(task, error)
   end
 end
