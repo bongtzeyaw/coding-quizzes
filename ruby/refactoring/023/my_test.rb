@@ -70,7 +70,7 @@ class MessageQueueTest < Minitest::Test
 
     messages = @queue.get_messages('test-topic', 'subscriber1')
     assert_equal 5, messages.length
-    assert_equal 'Message 4', messages[0][:content]
+    assert_equal 'Message 4', messages[0].content
 
     messages = @queue.get_messages('test-topic', 'subscriber1', 2)
     assert_equal 2, messages.length
@@ -86,7 +86,7 @@ class MessageQueueTest < Minitest::Test
 
     messages = @queue.get_messages('test-topic', 'filtered-sub')
     assert_equal 1, messages.length
-    assert_equal 'Filtered message', messages[0][:content]
+    assert_equal 'Filtered message', messages[0].content
   end
 
   def test_unsubscribe
@@ -163,7 +163,7 @@ class MessageQueueTest < Minitest::Test
 
     messages = @queue.get_messages('test-topic', 'subscriber1')
     assert_equal 2, messages.length
-    assert_equal 'Message 2', messages[0][:content]
-    assert_equal 'Message 1', messages[1][:content]
+    assert_equal 'Message 2', messages[0].content
+    assert_equal 'Message 1', messages[1].content
   end
 end
