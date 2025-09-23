@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require 'uri'
+
 class DataValidator
   def initialize(data)
     @data = data
@@ -8,29 +10,61 @@ class DataValidator
   def validate
     raise NotImplementedError, "#{self.class} must implement #validate"
   end
+
+  private
+
+  def field_present?(field)
+    !@data[field].nil? && !@data[field].empty?
+  end
 end
 
 class EmailValidator < DataValidator
+  VALID_EMAIL_FORMAT = URI::MailTo::EMAIL_REGEXP
+
   def validate
-    raise 'Invalid email address' if @data[:to].nil? || @data[:to].empty?
+    raise 'Invalid email address' unless field_present?(:to) && valid_email_format?
+
+    true
+  end
+
+  private
+
+  def valid_email_format?
+    @data[:to].match(VALID_EMAIL_FORMAT)
   end
 end
 
 class HttpRequestValidator < DataValidator
   def validate
-    raise 'Invalid URL' unless @data[:url].start_with?('http')
+    raise 'Invalid URL' unless field_present?(:url) && valid_url?
+
+    true
+  end
+
+  private
+
+  def valid_url?(url)
+    uri = URI.parse(url)
+    uri.is_a?(URI::HTTP)
+    true
+  rescue URI::InvalidURIError
+    false
   end
 end
 
 class DataProcessingValidator < DataValidator
   def validate
-    raise 'Invalid input data' if @data[:input].nil? || @data[:input].empty?
+    raise 'Invalid input data' unless field_present?(:input)
+
+    true
   end
 end
 
 class ReportGenerationValidator < DataValidator
   def validate
-    raise 'Invalid report type' if @data[:report_type].nil? || @data[:report_type].empty?
+    raise 'Invalid report type' unless field_present?(:report_type)
+
+    true
   end
 end
 
