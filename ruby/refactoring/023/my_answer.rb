@@ -248,13 +248,142 @@ class UnsubscriptionValidator < Validator
   end
 end
 
+class DeliveryStrategy
+  def initialize(message)
+    @message = message
+  end
+
+  def with_strategy
+    raise NotImplementedError, "#{self.class} must implement #with_strategy"
+  end
+end
+
+class SyncDeliveryStrategy < DeliveryStrategy
+  def with_strategy
+    yield
+  end
+end
+
+class AsyncDeliveryStrategy < DeliveryStrategy
+  def with_strategy
+    Thread.new do
+      sleep(delay_factor)
+      yield
+    end
+  end
+
+  private
+
+  def delay_factor
+    0.1 * (10 - @message.priority)
+  end
+end
+
+class DeliveryStrategyDispatcher
+  def self.dispatch(options_async)
+    options_async ? AsyncDeliveryStrategy : SyncDeliveryStrategy
+  end
+end
+
+class DeliveryExecutor
+  def initialize(strategy:, subscribers:, message:)
+    @strategy = strategy
+    @subscribers = subscribers
+    @message = message
+    @delivered_count = 0
+  end
+
+  def execute
+    @subscribers.each do |subscriber|
+      with_retry_attempt(subscriber) do
+        @strategy.with_strategy do
+          subscriber.handle(@message)
+        end
+
+        subscriber.message_count += 1
+        @delivered_count += 1
+      end
+    end
+
+    { success: true, delivered_count: @delivered_count }
+  end
+
+  private
+
+  def retriable?
+    @message.under_retry_limit?
+  end
+
+  def handle_failure(error, subscriber)
+    failed_message = {
+      message: @message,
+      subscriber: subscriber.name,
+      error: error.message,
+      failed_at: Time.now.utc
+    }
+
+    { success: false, failed_message: }
+  end
+
+  def retry_delivery(error)
+    @message.retry_count += 1
+    @message.last_error = error.message
+
+    Thread.new do
+      sleep(@message.retry_count * 2)
+      execute
+    end
+  end
+
+  def with_retry_attempt(subscriber)
+    yield
+  rescue StandardError => e
+    subscriber.error_count += 1
+
+    handle_failure(e, subscriber) unless retriable?
+
+    retry_delivery(e)
+
+    puts "Error delivering to #{subscriber.name}: #{e.message}"
+
+    { success: false }
+  end
+end
+
+class DeliveryService
+  def initialize
+    @failed_messages = []
+  end
+
+  def deliver(message:, subscribers:, options: {})
+    strategy_class = DeliveryStrategyDispatcher.dispatch(options[:async])
+    strategy = strategy_class.new(message)
+
+    executor = DeliveryExecutor.new(strategy:, subscribers:, message:)
+    result = executor.execute
+
+    handle_failure(result) unless result[:success]
+
+    result
+  end
+
+  def count_failed_messages_for_topic(topic_name:)
+    @failed_messages.count { |m| m[:message].topic.name == topic_name }
+  end
+
+  private
+
+  def handle_failure(result)
+    @failed_messages << result[:failed_message]
+  end
+end
+
 class MessageQueue
   def initialize
     @topic_registry = TopicRegistry.new
     @message_registry = MessageRegistry.new
     @subscriber_registry = SubscriberRegistry.new
-    @failed_messages = []
-    @message_id = 0
+    @delivery_service = DeliveryService.new
   end
 
   def create_topic(topic_name, options = {})
@@ -273,6 +402,7 @@ class MessageQueue
     )
 
     @topic_registry.register(topic)
+
     @message_registry.register(topic_name:)
     @subscriber_registry.register_topic(topic_name:)
 
@@ -285,12 +415,6 @@ class MessageQueue
 
     unless validation_result[:success]
       puts validation_result[:info]
-      return false
-    end
-
-    existing = @subscribers[topic_name].find { |s| s[:name] == subscriber_name }
-    if existing
-      puts "Subscriber already exists: #{subscriber_name}"
       return false
     end
 
@@ -329,56 +453,11 @@ class MessageQueue
     @message_registry.cleanup_expired(topic_name:, retention_period: topic.retention_period)
 
     target_subscribers = @subscriber_registry.filter_subscribers_for_topic(topic_name:, message:)
-    delivered_count = 0
-    target_subscribers.each do |subscriber|
-      if subscriber.filter
-        matched = true
-        subscriber.filter.each do |key, value|
-          if message.attributes[key] != value
-            matched = false
-            break
-          end
-        end
-        next unless matched
-      end
+    result = @delivery_service.deliver(message:, subscribers: target_subscribers, options:)
 
-      begin
-        if options[:async]
-          Thread.new do
-            sleep(0.1 * (10 - message.priority))
-            subscriber.handler.call(message.content, message.attributes)
-          end
-        else
-          subscriber.handler.call(message.content, message.attributes)
-        end
+    return nil unless result[:success]
 
-        subscriber.message_count += 1
-        delivered_count += 1
-      rescue StandardError => e
-        subscriber.error_count += 1
-
-        if message.retry_count < topic.max_retries
-          message.retry_count += 1
-          message.last_error = e.message
-
-          Thread.new do
-            sleep(message.retry_count * 2)
-            publish(topic_name, message, options)
-          end
-        else
-          @failed_messages << {
-            message:,
-            subscriber: subscriber[:name],
-            error: e.message,
-            failed_at: Time.now
-          }
-        end
-
-        puts "Error delivering to #{subscriber.name}: #{e.message}"
-      end
-    end
-
-    { id: @message_id, delivered_to: delivered_count }
+    { id: message_id, delivered_to: result[:delivered_count] }
   end
 
   def get_messages(topic_name, subscriber_name, limit = 10)
