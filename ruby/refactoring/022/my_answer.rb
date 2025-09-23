@@ -7,33 +7,46 @@ class CacheRetentionManager
     @ttl = ttl
     @access_times = {}
     @creation_times = {}
+    @mutex = Mutex.new
   end
 
   def key_expired?(key)
-    @creation_times[key] && (Time.now.utc - @creation_times[key]) > @ttl
+    @mutex.synchronize do
+      @creation_times[key] && (Time.now.utc - @creation_times[key]) > @ttl
+    end
   end
 
   def delete(key)
-    @access_times.delete(key)
-    @creation_times.delete(key)
+    @mutex.synchronize do
+      @access_times.delete(key)
+      @creation_times.delete(key)
+    end
   end
 
   def clear
-    @access_times.clear
-    @creation_times.clear
+    @mutex.synchronize do
+      @access_times.clear
+      @creation_times.clear
+    end
   end
 
   def record_access(key)
-    @access_times[key] = Time.now.utc
+    @mutex.synchronize do
+      @access_times[key] = Time.now.utc
+    end
   end
 
   def record_creation(key)
-    @creation_times[key] = Time.now.utc
-    record_access(key)
+    @mutex.synchronize do
+      @creation_times[key] = Time.now.utc
+      @access_times[key] = Time.now.utc
+    end
   end
 
   def least_recently_used_key
-    @access_times.key(@access_times.values.min)
+    @mutex.synchronize do
+      @access_times.key(@access_times.values.min)
+    end
   end
 
   def equal_current_ttl?(ttl)
@@ -49,10 +62,13 @@ class CacheStorage
   def initialize(max_size: DEFAULT_MAX_SIZE)
     @cache = {}
     @max_size = max_size
+    @mutex = Mutex.new
   end
 
   def find_by(key)
-    @cache[key]
+    @mutex.synchronize do
+      @cache[key]
+    end
   end
 
   def key_exists?(key)
@@ -60,23 +76,29 @@ class CacheStorage
   end
 
   def set(key, value)
-    @cache[key] = value
+    @mutex.synchronize do
+      @cache[key] = value
+    end
   end
 
   def delete(key)
-    @cache.delete(key)
+    @mutex.synchronize do
+      @cache.delete(key)
+    end
   end
 
   def clear
-    @cache.clear
-  end
-
-  def capacity_reached?
-    @cache.size >= @max_size
+    @mutex.synchronize do
+      @cache.clear
+    end
   end
 
   def size
     @cache.size
+  end
+
+  def capacity_reached?
+    size >= @max_size
   end
 
   def memory_usage
@@ -90,26 +112,35 @@ class CacheHitMissCounter
   def initialize
     @hit_count = 0
     @miss_count = 0
+    @mutex = Mutex.new
   end
 
   def record_hit
-    @hit_count += 1
+    @mutex.synchronize do
+      @hit_count += 1
+    end
   end
 
   def record_miss
-    @miss_count += 1
+    @mutex.synchronize do
+      @miss_count += 1
+    end
   end
 
   def clear
-    @hit_count = 0
-    @miss_count = 0
+    @mutex.synchronize do
+      @hit_count = 0
+      @miss_count = 0
+    end
   end
 
   def hit_rate
-    total_requests = @hit_count + @miss_count
-    return 0 unless total_requests.positive?
+    @mutex.synchronize do
+      total_requests = @hit_count + @miss_count
+      return 0 unless total_requests.positive?
 
-    (@hit_count.to_f / total_requests * 100)
+      (@hit_count.to_f / total_requests * 100)
+    end
   end
 end
 
