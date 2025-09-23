@@ -1,6 +1,49 @@
-class MessageQueue
+# frozen_string_literal: true
+
+class Topic
+  DEFAULT_MAX_RETRIES = 3
+  DEFAULT_RETENTION_PERIOD = 24 * 60 * 60
+
+  attr_reader :name, :max_retries, :retention_period
+  attr_accessor :message_count
+
+  def initialize(name:, max_retries:, retention_period:)
+    @name = name
+    @created_at = Time.now.utc
+    @max_retries = max_retries || DEFAULT_MAX_RETRIES
+    @retention_period = retention_period || DEFAULT_RETENTION_PERIOD
+    @message_count = 0
+  end
+end
+
+class TopicRegistry
   def initialize
     @topics = {}
+  end
+
+  def find(name)
+    topic = @topics[name]
+    raise "Topic not found: #{name}" unless topic
+
+    topic
+  end
+
+  def all
+    @topics.values
+  end
+
+  def topic_exist?(name)
+    @topics.key?(name)
+  end
+
+  def register(topic)
+    @topics[topic.name] = topic
+  end
+end
+
+class MessageQueue
+  def initialize
+    @topic_registry = TopicRegistry.new
     @subscribers = {}
     @messages = {}
     @failed_messages = []
@@ -8,17 +51,18 @@ class MessageQueue
   end
 
   def create_topic(topic_name, options = {})
-    if @topics[topic_name]
+    if @topic_registry.topic_exist?(topic_name)
       puts "Topic already exists: #{topic_name}"
       return false
     end
 
-    @topics[topic_name] = {
-      created_at: Time.now,
-      max_retries: options[:max_retries] || 3,
-      retention_period: options[:retention_period] || 86_400,
-      message_count: 0
-    }
+    topic = Topic.new(
+      name: topic_name,
+      max_retries: options[:max_retries],
+      retention_period: options[:retention_period]
+    )
+
+    @topic_registry.register(topic)
 
     @messages[topic_name] = []
     @subscribers[topic_name] = []
@@ -27,7 +71,7 @@ class MessageQueue
   end
 
   def subscribe(topic_name, subscriber_name, filter = nil, &handler)
-    unless @topics[topic_name]
+    unless @topic_registry.topic_exist?(topic_name)
       puts "Topic not found: #{topic_name}"
       return false
     end
@@ -51,7 +95,7 @@ class MessageQueue
   end
 
   def publish(topic_name, message, options = {})
-    unless @topics[topic_name]
+    unless @topic_registry.topic_exist?(topic_name)
       puts "Topic not found: #{topic_name}"
       return nil
     end
@@ -69,9 +113,9 @@ class MessageQueue
     }
 
     @messages[topic_name] << message_data
-    @topics[topic_name][:message_count] += 1
+    @topic_registry.find(topic_name).message_count += 1
 
-    retention = @topics[topic_name][:retention_period]
+    retention = @topic_registry.find(topic_name).retention_period
     @messages[topic_name].delete_if do |msg|
       (Time.now - msg[:published_at]) > retention
     end
@@ -129,7 +173,7 @@ class MessageQueue
   end
 
   def get_messages(topic_name, subscriber_name, limit = 10)
-    return [] unless @topics[topic_name]
+    return [] unless @topic_registry.topic_exist?(topic_name)
 
     subscriber = @subscribers[topic_name].find { |s| s[:name] == subscriber_name }
     return [] unless subscriber
@@ -154,7 +198,7 @@ class MessageQueue
   end
 
   def unsubscribe(topic_name, subscriber_name)
-    return false unless @topics[topic_name]
+    return false unless @topic_registry.topic_exist?(topic_name)
 
     @subscribers[topic_name].delete_if { |s| s[:name] == subscriber_name }
     true
@@ -163,7 +207,7 @@ class MessageQueue
   def get_stats
     stats = {}
 
-    @topics.each do |topic_name, topic_info|
+    @topic_registry.all.each do |topic_name, topic_info|
       stats[topic_name] = {
         message_count: topic_info[:message_count],
         subscriber_count: @subscribers[topic_name].length,
