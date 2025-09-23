@@ -11,7 +11,7 @@ class TaskQueueTest < Minitest::Test
     id = nil
     Time.stub :now, Time.at(100).utc do
       Kernel.stub :rand, 1 do
-        id = @queue.add_task('email', { to: 'user@example.com' })
+        id = @queue.add_task(type: 'email', data: { to: 'user@example.com' })
       end
     end
     tasks_in_queue = @queue.instance_variable_get(:@priority_queue).instance_variable_get(:@tasks)
@@ -20,8 +20,8 @@ class TaskQueueTest < Minitest::Test
   end
 
   def test_add_task_priority_order
-    low = @queue.add_task('email', { to: 'low@example.com' }, 1)
-    high = @queue.add_task('email', { to: 'high@example.com' }, 10)
+    low = @queue.add_task(type: 'email', data: { to: 'low@example.com' }, priority: 1)
+    high = @queue.add_task(type: 'email', data: { to: 'high@example.com' }, priority: 10)
     tasks = @queue.instance_variable_get(:@priority_queue).instance_variable_get(:@tasks)
     tasks_in_queue = @queue.instance_variable_get(:@priority_queue).instance_variable_get(:@tasks)
     assert_equal 2, tasks_in_queue.size
@@ -31,7 +31,7 @@ class TaskQueueTest < Minitest::Test
 
   def test_email_task_success
     result = nil
-    id = @queue.add_task('email', { to: 'ok@example.com', on_success: ->(r) { result = r } })
+    id = @queue.add_task(type: 'email', data: { to: 'ok@example.com', on_success: ->(r) { result = r } })
     mock_handler = Minitest::Mock.new
     mock_handler.expect(:handle, 'Email sent', [Hash])
     TaskHandlerDispatcher.stub :find, mock_handler do
@@ -49,7 +49,7 @@ class TaskQueueTest < Minitest::Test
   end
 
   def test_http_request_success
-    id = @queue.add_task('http_request', { url: 'http://example.com', on_success: ->(_r) { nil } })
+    id = @queue.add_task(type: 'http_request', data: { url: 'http://example.com', on_success: ->(_r) { nil } })
     mock_handler = Minitest::Mock.new
     mock_handler.expect(:handle, 'Response: 200 OK', [Hash])
     TaskHandlerDispatcher.stub :find, mock_handler do
@@ -64,7 +64,7 @@ class TaskQueueTest < Minitest::Test
   end
 
   def test_data_processing_success
-    id = @queue.add_task('data_processing', { input: 'abc', on_success: ->(_r) { nil } })
+    id = @queue.add_task(type: 'data_processing', data: { input: 'abc', on_success: ->(_r) { nil } })
     mock_handler = Minitest::Mock.new
     mock_handler.expect(:handle, 'Processed: ABC', [Hash])
     TaskHandlerDispatcher.stub :find, mock_handler do
@@ -79,7 +79,7 @@ class TaskQueueTest < Minitest::Test
   end
 
   def test_report_generation_success
-    id = @queue.add_task('report_generation', { report_type: 'daily', on_success: ->(_r) { nil } })
+    id = @queue.add_task(type: 'report_generation', data: { report_type: 'daily', on_success: ->(_r) { nil } })
     mock_handler = Minitest::Mock.new
     mock_handler.expect(:handle, 'Report generated: daily_report.pdf', [Hash])
     TaskHandlerDispatcher.stub :find, mock_handler do
@@ -95,7 +95,7 @@ class TaskQueueTest < Minitest::Test
 
   def test_task_failure
     result = nil
-    id = @queue.add_task('email', { to: 'invalid', on_failure: ->(msg) { result = msg } })
+    id = @queue.add_task(type: 'email', data: { to: 'invalid', on_failure: ->(msg) { result = msg } })
     mock_handler = Minitest::Mock.new
     3.times { mock_handler.expect(:handle, nil) { raise 'Invalid email address' } }
     TaskHandlerDispatcher.stub :find, mock_handler do
@@ -116,7 +116,7 @@ class TaskQueueTest < Minitest::Test
   end
 
   def test_task_failure_and_retry
-    id = @queue.add_task('email', { to: 'ok@example.com', on_success: ->(_r) { nil } })
+    id = @queue.add_task(type: 'email', data: { to: 'ok@example.com', on_success: ->(_r) { nil } })
     mock_handler = Minitest::Mock.new
     2.times { mock_handler.expect(:handle, nil) { raise 'Invalid email address' } }
     mock_handler.expect(:handle, 'Email sent', [Hash])
@@ -143,7 +143,7 @@ class TaskQueueTest < Minitest::Test
   end
 
   def test_unknown_task_type
-    id = @queue.add_task('unknown', {})
+    id = @queue.add_task(type: 'unknown', data: {})
     @queue.process_tasks
     failed_tasks = @queue.instance_variable_get(:@tasks_executor).instance_variable_get(:@failed_tasks)
     assert_equal 1, failed_tasks.size
@@ -155,8 +155,8 @@ class TaskQueueTest < Minitest::Test
   end
 
   def test_get_status_counts
-    @queue.add_task('email', { to: 'invalid', on_success: ->(_r) { nil } })
-    @queue.add_task('email', { to: 'ok@example.com', on_success: ->(_r) { nil } })
+    @queue.add_task(type: 'email', data: { to: 'invalid', on_success: ->(_r) { nil } })
+    @queue.add_task(type: 'email', data: { to: 'ok@example.com', on_success: ->(_r) { nil } })
     mock_handler = Minitest::Mock.new
     3.times { mock_handler.expect(:handle, nil) { raise 'Invalid email address' } }
     mock_handler.expect(:handle, 'Email sent', [Hash])

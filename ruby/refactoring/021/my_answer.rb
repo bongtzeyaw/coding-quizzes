@@ -333,7 +333,7 @@ class TaskQueue
     @tasks_executor = TasksExecutor.new
   end
 
-  def add_task(type, data, priority = 5, retry_count = 3)
+  def add_task(type:, data:, priority: 5, retry_count: 3)
     task = Task.new(
       type: type,
       data: data,
