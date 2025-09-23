@@ -105,7 +105,7 @@ class TaskHandlerDispatcher
 end
 
 class Task
-  attr_reader :id, :type, :data, :priority, :retry_count, :attempts, :status 
+  attr_reader :id, :type, :data, :priority, :retry_count, :attempts, :status
 
   def initialize(type:, data:, priority:, retry_count:, attempts:, status:, created_at:)
     @id = generate_id
@@ -320,10 +320,10 @@ class QueueTasksProcessor
 
   def with_error_handling(task)
     yield
-  rescue StandardError => error
-    task.record_error(error)
+  rescue StandardError => e
+    task.record_error(e)
 
-    task.retry? ? retry_task(task) : fail_task(task, error)
+    task.retry? ? retry_task(task) : fail_task(task, e)
   end
 end
 
