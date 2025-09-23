@@ -1,35 +1,83 @@
-class TaskQueue
+# frozen_string_literal: true
+
+class Task
+  attr_reader :id, :type, :data, :priority, :retry_count, :attempts, :status 
+
+  def initialize(type:, data:, priority:, retry_count:, attempts:, status:, created_at:)
+    @id = generate_id
+    @type = type
+    @data = data
+    @priority = priority
+    @retry_count = retry_count
+    @attempts = attempts
+    @status = status
+    @created_at = created_at
+
+    initialize_start_attr
+    initialize_completion_attr
+    initialize_failure_attr
+    initialize_retry_attr
+  end
+
+  private
+
+  def initialize_start_attr
+    @started_at = nil
+  end
+
+  def initialize_completion_attr
+    @completed_at = nil
+    @result = nil
+    @duration = nil
+  end
+
+  def initialize_failure_attr
+    @last_error = nil
+    @failed_at = nil
+  end
+
+  def initialize_retry_attr
+    @retry_after = nil
+  end
+
+  def generate_id
+    "task_#{Time.now.utc.to_i}_#{Kernel.rand(1000)}"
+  end
+end
+
+class PriorityQueue
   def initialize
     @tasks = []
+  end
+
+  def enqueue(task)
+    insert_position = @tasks.bsearch_index { |task_in_queue| task.priority >= task_in_queue.priority } || @tasks.length
+    @tasks.insert(insert_position, task)
+  end
+end
+
+class TaskQueue
+  def initialize
+    @priority_queue = PriorityQueue.new
     @failed_tasks = []
     @completed_tasks = []
     @running = false
   end
 
   def add_task(type, data, priority = 5, retry_count = 3)
-    task = {
-      id: generate_id,
+    task = Task.new(
       type: type,
       data: data,
       priority: priority,
       retry_count: retry_count,
       attempts: 0,
       status: 'pending',
-      created_at: Time.now
-    }
+      created_at: Time.now.utc
+    )
 
-    inserted = false
-    for i in 0..@tasks.length - 1
-      next unless @tasks[i][:priority] < priority
+    @priority_queue.enqueue(task)
 
-      @tasks.insert(i, task)
-      inserted = true
-      break
-    end
-
-    @tasks << task unless inserted
-
-    task[:id]
+    task.id
   end
 
   def process_tasks
