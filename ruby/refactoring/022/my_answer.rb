@@ -124,11 +124,27 @@ class CacheStatistics
   end
 end
 
+class CacheSystemLogger
+  def log_cache_hit(key)
+    puts "[CACHE HIT] Key: #{key}"
+  end
+
+  def log_cache_miss(key)
+    puts "[CACHE MISS] Key: #{key}"
+  end
+
+  def log_eviction(key)
+    puts "[CACHE EVICT] Key: #{key}"
+  end
+end
+
 class CacheSystem
-  def initialize(max_size = 100, ttl = 3600)
+  def initialize
     @cache_storage = CacheStorage.new
     @cache_retention_manager = CacheRetentionManager.new
     @cache_hit_miss_counter = CacheHitMissCounter.new
+    @logger = CacheSystemLogger.new
+    @cache_statistics = CacheStatistics.new
   end
 
   def get(key, options = {})
@@ -176,7 +192,6 @@ class CacheSystem
     @cache_storage.clear
     @cache_retention_manager.clear
     @cache_hit_miss_counter.clear
-    @miss_count = 0
   end
 
   def size
@@ -213,13 +228,13 @@ class CacheSystem
   end
 
   def handle_cache_hit(key:, logging: false)
-    @cache_retention_manager.record_access(key)
     @cache_hit_miss_counter.record_hit
-    puts "[CACHE HIT] Key: #{key}" if logging
+    @cache_retention_manager.record_access(key)
+    @logger.log_cache_hit(key) if logging
   end
 
   def handle_cache_miss(key:, logging: false)
     @cache_hit_miss_counter.record_miss
-    puts "[CACHE MISS] Key: #{key}" if logging
+    @logger.log_cache_miss(key) if logging
   end
 end
