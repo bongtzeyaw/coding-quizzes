@@ -105,17 +105,24 @@ class TaskHandlerDispatcher
 end
 
 class Task
-  attr_reader :id, :type, :data, :priority, :retry_count, :attempts, :status
+  STATUS = {
+    pending: 'pending',
+    running: 'running',
+    completed: 'completed',
+    failed: 'failed'
+  }.freeze
 
-  def initialize(type:, data:, priority:, retry_count:, attempts:, status:, created_at:)
+  attr_reader :id, :type, :data, :priority, :retry_count, :attempts
+
+  def initialize(type:, data:, priority:, retry_count:, attempts:, created_at:)
     @id = generate_id
     @type = type
     @data = data
     @priority = priority
     @retry_count = retry_count
     @attempts = attempts
-    @status = status
     @created_at = created_at
+    @status = STATUS[:pending]
 
     initialize_start_attr
     initialize_completion_attr
@@ -123,13 +130,23 @@ class Task
     initialize_retry_attr
   end
 
+  def change_status(new_status)
+    raise 'Invalid status' unless STATUS.key?(new_status)
+
+    @status = STATUS[new_status]
+  end
+
+  def status_equal?(other_status)
+    @status == STATUS[other_status]
+  end
+
   def record_start
-    @status = 'running'
+    change_status(:running)
     @started_at = Time.now.utc
   end
 
   def record_completion(result)
-    @status = 'completed'
+    change_status(:completed)
     @completed_at = Time.now.utc
     @result = result
     @duration = @completed_at - @started_at
@@ -142,11 +159,11 @@ class Task
   end
 
   def record_failure
-    @status = 'failed'
+    change_status(:failed)
   end
 
   def record_retry
-    @status = 'pending'
+    change_status(:pending)
     @retry_after = Time.now.utc + (@attempts * 5)
   end
 
@@ -267,7 +284,7 @@ class PriorityQueue
   end
 
   def pending_count
-    @tasks.count { |task| task.status == 'pending' }
+    @tasks.count { |task| task.status_equal?(:pending) }
   end
 
   def empty?
@@ -340,7 +357,6 @@ class TaskQueue
       priority: priority,
       retry_count: retry_count,
       attempts: 0,
-      status: 'pending',
       created_at: Time.now.utc
     )
 

@@ -43,7 +43,7 @@ class TaskQueueTest < Minitest::Test
     completed_tasks = @queue.instance_variable_get(:@tasks_executor).instance_variable_get(:@completed_tasks)
     assert_equal 1, completed_tasks.size
     assert_equal id, completed_tasks.first.id
-    assert_equal 'completed', completed_tasks.first.status
+    assert_equal 'completed', completed_tasks.first.instance_variable_get(:@status)
     assert_equal 'Email sent', completed_tasks.first.instance_variable_get(:@result)
     assert_equal 'Email sent', result
   end
@@ -59,7 +59,7 @@ class TaskQueueTest < Minitest::Test
     completed_tasks = @queue.instance_variable_get(:@tasks_executor).instance_variable_get(:@completed_tasks)
     assert_equal 1, completed_tasks.size
     assert_equal id, completed_tasks.first.id
-    assert_equal 'completed', completed_tasks.first.status
+    assert_equal 'completed', completed_tasks.first.instance_variable_get(:@status)
     assert_equal 'Response: 200 OK', completed_tasks.first.instance_variable_get(:@result)
   end
 
@@ -74,7 +74,7 @@ class TaskQueueTest < Minitest::Test
     completed_tasks = @queue.instance_variable_get(:@tasks_executor).instance_variable_get(:@completed_tasks)
     assert_equal 1, completed_tasks.size
     assert_equal id, completed_tasks.first.id
-    assert_equal 'completed', completed_tasks.first.status
+    assert_equal 'completed', completed_tasks.first.instance_variable_get(:@status)
     assert_equal 'Processed: ABC', completed_tasks.first.instance_variable_get(:@result)
   end
 
@@ -89,7 +89,7 @@ class TaskQueueTest < Minitest::Test
     completed_tasks = @queue.instance_variable_get(:@tasks_executor).instance_variable_get(:@completed_tasks)
     assert_equal 1, completed_tasks.size
     assert_equal id, completed_tasks.first.id
-    assert_equal 'completed', completed_tasks.first.status
+    assert_equal 'completed', completed_tasks.first.instance_variable_get(:@status)
     assert_equal 'Report generated: daily_report.pdf', completed_tasks.first.instance_variable_get(:@result)
   end
 
@@ -109,7 +109,7 @@ class TaskQueueTest < Minitest::Test
     failed_tasks = @queue.instance_variable_get(:@tasks_executor).instance_variable_get(:@failed_tasks)
     assert_equal 1, failed_tasks.size
     assert_equal id, failed_tasks.first.id
-    assert_equal 'failed', failed_tasks.first.status
+    assert_equal 'failed', failed_tasks.first.instance_variable_get(:@status)
     assert_equal 3, failed_tasks.first.attempts
     assert_equal 'Invalid email address', failed_tasks.first.instance_variable_get(:@last_error)
     assert_equal 'Invalid email address', result
@@ -129,7 +129,7 @@ class TaskQueueTest < Minitest::Test
     completed_tasks = @queue.instance_variable_get(:@tasks_executor).instance_variable_get(:@completed_tasks)
     assert_equal 1, completed_tasks.size
     assert_equal id, completed_tasks.first.id
-    assert_equal 'completed', completed_tasks.first.status
+    assert_equal 'completed', completed_tasks.first.instance_variable_get(:@status)
     assert_equal 2, completed_tasks.first.attempts
     assert_equal 'Invalid email address', completed_tasks.first.instance_variable_get(:@last_error)
   end
@@ -150,7 +150,7 @@ class TaskQueueTest < Minitest::Test
     assert_equal id, failed_tasks.first.id
     completed_tasks = @queue.instance_variable_get(:@tasks_executor).instance_variable_get(:@completed_tasks)
     assert_equal 0, completed_tasks.size
-    assert_equal 'failed', failed_tasks.first.status
+    assert_equal 'failed', failed_tasks.first.instance_variable_get(:@status)
     assert_equal('Unknown task type', failed_tasks.first.instance_variable_get(:@last_error))
   end
 
