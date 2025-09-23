@@ -36,7 +36,7 @@ end
 
 class TaskHandler
   def handle(data)
-    raise NotImplementedError, "#{self.class} must implement the #handle"
+    raise NotImplementedError, "#{self.class} must implement #handle"
   end
 end
 
