@@ -84,12 +84,40 @@ class CacheStorage
   end
 end
 
+class CacheHitMissCounter
+  attr_reader :hit_count, :miss_count
+
+  def initialize
+    @hit_count = 0
+    @miss_count = 0
+  end
+
+  def record_hit
+    @hit_count += 1
+  end
+
+  def record_miss
+    @miss_count += 1
+  end
+
+  def clear
+    @hit_count = 0
+    @miss_count = 0
+  end
+
+  def hit_rate
+    total_requests = @hit_count + @miss_count
+    return 0 unless total_requests.positive?
+
+    (@hit_count.to_f / total_requests * 100)
+  end
+end
+
 class CacheSystem
   def initialize(max_size = 100, ttl = 3600)
     @cache_storage = CacheStorage.new
     @cache_retention_manager = CacheRetentionManager.new
-    @hit_count = 0
-    @miss_count = 0
+    @cache_hit_miss_counter = CacheHitMissCounter.new
   end
 
   def get(key, options = {})
@@ -136,7 +164,7 @@ class CacheSystem
   def clear
     @cache_storage.clear
     @cache_retention_manager.clear
-    @hit_count = 0
+    @cache_hit_miss_counter.clear
     @miss_count = 0
   end
 
@@ -187,12 +215,12 @@ class CacheSystem
 
   def handle_cache_hit(key:, logging: false)
     @cache_retention_manager.record_access(key)
-    @hit_count += 1
+    @cache_hit_miss_counter.record_hit
     puts "[CACHE HIT] Key: #{key}" if logging
   end
 
   def handle_cache_miss(key:, logging: false)
-    @miss_count += 1
+    @cache_hit_miss_counter.record_miss
     puts "[CACHE MISS] Key: #{key}" if logging
   end
 end
