@@ -361,31 +361,23 @@ class TaskQueue
   end
 
   def get_status
-    pending_count = @tasks.count { |t| t[:status] == 'pending' }
+    pending_count = @priority_queue.pending_count
+
+    completed_count = @tasks_executor.completed_count
+    failed_count = @tasks_executor.failed_count
 
     {
       pending: pending_count,
-      completed: @completed_tasks.length,
-      failed: @failed_tasks.length,
-      total: pending_count + @completed_tasks.length + @failed_tasks.length
+      completed: completed_count,
+      failed: failed_count,
+      total: pending_count + completed_count + failed_count
     }
   end
 
   def get_task_info(task_id)
-    task = @tasks.find { |t| t[:id] == task_id }
-    task ||= @completed_tasks.find { |t| t[:id] == task_id }
-    task ||= @failed_tasks.find { |t| t[:id] == task_id }
-
+    task = @priority_queue.find_task_in_queue_by(task_id) || @tasks_executor.find_executed_task_by(task_id)
     return nil unless task
 
-    {
-      id: task[:id],
-      type: task[:type],
-      status: task[:status],
-      attempts: task[:attempts],
-      created_at: task[:created_at],
-      duration: task[:duration],
-      error: task[:last_error]
-    }
+    task.to_h
   end
 end
