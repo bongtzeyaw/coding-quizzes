@@ -1,3 +1,23 @@
+class DefaultValuesManager
+  def initialize
+    @default_values = {}
+  end
+
+  def find_by(key)
+    @default_values[key]
+  end
+
+  def store_defaults(data)
+    return unless data.is_a?(Hash)
+
+    return unless data['default']
+
+    data['default'].each do |key, value|
+      @default_values[key] = value
+    end
+  end
+end
+
 class FileReader
   class << self
     def read(file_path)
@@ -25,7 +45,7 @@ class ConfigManager
   def initialize
     @configs = {}
     @environments = %w[development staging production]
-    @default_values = {}
+    @default_value_manager = DefaultValuesManager.new
   end
 
   def load_config(file_path, environment = 'development')
@@ -43,13 +63,13 @@ class ConfigManager
     end
 
     data = parse_result[:data]
+    @default_value_manager.store_defaults(data)
 
     env_config = {}
 
     if data['default']
       data['default'].each do |key, value|
         env_config[key] = value
-        @default_values[key] = value
       end
     end
 
@@ -116,7 +136,7 @@ class ConfigManager
   end
 
   def get(key, environment = 'development')
-    return @default_values[key] unless @configs[environment]
+    return @default_value_manager.find_by(key) unless @configs[environment]
 
     value = @configs[environment][key]
 
@@ -125,7 +145,7 @@ class ConfigManager
       current = @configs[environment]
 
       parts.each do |part|
-        return @default_values[key] unless current.is_a?(Hash) && current[part]
+        return @default_value_manager.find_by(key) unless current.is_a?(Hash) && current[part]
 
         current = current[part]
       end
