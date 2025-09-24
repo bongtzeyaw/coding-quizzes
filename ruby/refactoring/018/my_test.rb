@@ -238,10 +238,10 @@ end
 class ErrorRateCollectorTest < Minitest::Test
   def setup
     @service_class = Minitest::Mock.new
-    @service_class.expect(:errors, [
-                            { type: 'Timeout', message: 'Request timeout' },
-                            { type: 'NotFound', message: 'Not found' }
-                          ])
+    @service_class.expect(:errors, ErrorCollection.new([
+                            ServiceError.new(type: 'Timeout', message: 'Request timeout'),
+                            ServiceError.new(type: 'NotFound', message: 'Not found')
+                          ]))
 
     @collector = ErrorRateCollector.new(@service_class)
   end

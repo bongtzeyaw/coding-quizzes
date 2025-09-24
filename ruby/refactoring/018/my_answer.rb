@@ -140,6 +140,30 @@ class ReportDispatcher
   end
 end
 
+class ServiceError
+  attr_reader :type
+
+  def initialize(type:, message:)
+    @type = type
+    @message = message
+  end
+end
+
+class ErrorCollection
+  def initialize(errors = [])
+    @errors = errors
+  end
+
+  def error_count
+    @errors.length
+  end
+
+  def error_types
+    @errors.group_by { |e| e.type || 'Unknown' }
+           .transform_values(&:count)
+  end
+end
+
 class Service
   class << self
     def call
@@ -167,7 +191,10 @@ class ApiService < Service
     end
 
     def errors
-      [{ type: 'Timeout', message: 'Request timeout' }, { type: 'NotFound', message: 'Not found' }]
+      ErrorCollection.new([
+        ServiceError.new(type: 'Timeout', message: 'Request timeout'),
+        ServiceError.new(type: 'NotFound', message: 'Not found')
+      ])
     end
   end
 end
@@ -183,7 +210,9 @@ class DatabaseService < Service
     end
 
     def errors
-      [{ type: 'ConnectionError', message: 'Connection failed' }]
+      ErrorCollection.new([
+        ServiceError.new(type: 'ConnectionError', message: 'Connection failed')
+      ])
     end
   end
 end
@@ -199,7 +228,7 @@ class CacheService < Service
     end
 
     def errors
-      []
+      ErrorCollection.new
     end
   end
 end
@@ -283,13 +312,9 @@ class ErrorRateCollector < Collector
   def collect
     errors = @service.errors
 
-    error_count = errors.length
-    error_types = errors.group_by { |e| e[:type] || 'Unknown' }
-                        .transform_values(&:count)
-
     {
-      error_count: error_count,
-      error_types: error_types
+      error_count: errors.error_count,
+      error_types: errors.error_types
     }
   end
 end
