@@ -251,6 +251,60 @@ class AllConfigValidator < ConfigManagerValidator
   end
 end
 
+class ConfigFormatter
+  class << self
+    def format(config)
+      raise NotImplementedError, "#{self.class} must implement .format"
+    end
+  end
+end
+
+class YamlFormatter < ConfigFormatter
+  class << self
+    def format(config)
+      config.to_yaml
+    end
+  end
+end
+
+class JsonFormatter < ConfigFormatter
+  class << self
+    def format(config)
+      JSON.pretty_generate(config)
+    end
+  end
+end
+
+class EnvFormatter < ConfigFormatter
+  ENV_FORMAT_PREFIX = 'APP'
+
+  class << self
+    def format(config)
+      config.map do |key, value|
+        "#{ENV_FORMAT_PREFIX}_#{key.upcase}=#{value}"
+      end.join("\n")
+    end
+  end
+end
+
+class ConfigFormatterDispatcher
+  FORMATTER_MAP = {
+    yaml: YamlFormatter,
+    json: JsonFormatter,
+    env: EnvFormatter
+  }.freeze
+
+  class << self
+    def dispatch(format)
+      FORMATTER_MAP[format.to_sym]
+    end
+
+    def format_exists?(format)
+      FORMATTER_MAP.key?(format.to_sym)
+    end
+  end
+end
+
 class EnvConfigLoader
   def load(data:, environment:)
     env_config = {}
@@ -463,8 +517,8 @@ class ConfigManager
   DEFAULT_EXPORT_FORMAT = 'yaml'
 
   def initialize
-    @configs = {}
-    @environments = %w[development staging production]
+    @config_loader = ConfigLoader.new
+    @config_registry = ConfigRegistry.new
     @default_value_manager = DefaultValuesManager.new
     @environments = %w[development staging production].freeze
   end
@@ -532,21 +586,10 @@ class ConfigManager
       return nil
     end
 
-    case format
-    when 'yaml'
-      @configs[environment].to_yaml
-    when 'json'
-      JSON.pretty_generate(@configs[environment])
-    when 'env'
-      lines = []
-      @configs[environment].each do |key, value|
-        lines << "APP_#{key.upcase}=#{value}"
-      end
-      lines.join("\n")
-    else
-      puts "Unknown format: #{format}"
-      nil
-    end
+    config = @config_registry.find(environment)
+    formatter_class = ConfigFormatterDispatcher.dispatch(format)
+
+    formatter_class.format(config)
   end
 
   def validate_all
