@@ -251,6 +251,170 @@ class AllConfigValidator < ConfigManagerValidator
   end
 end
 
+class EnvConfigLoader
+  def load(data:, environment:)
+    env_config = {}
+
+    data['default']&.each do |key, value|
+      env_config[key] = value
+    end
+
+    data[environment]&.each do |key, value|
+      env_config[key] = value
+    end
+
+    env_config
+  end
+end
+
+class EnvVariableOverrider
+  ENV_KEY_PREFIX = 'APP'
+
+  def override(env_config)
+    env_config.each_with_object({}) do |(original_key, original_value), result|
+      env_key = "#{ENV_KEY_PREFIX}_#{original_key.upcase}"
+
+      result[original_key] =
+        if ENV[env_key]
+          convert_env_value(ENV[env_key], original_value)
+        else
+          original_value
+        end
+    end
+  end
+
+  private
+
+  def convert_env_value(env_value, original_value)
+    case original_value
+    when Integer then env_value.to_i
+    when TrueClass, FalseClass then env_value.downcase == 'true'
+    else env_value
+    end
+  end
+end
+
+class VariableInterpolator
+  def interpolate(config)
+    interpolated_config = config.dup
+
+    interpolated_config.each do |key, value|
+      next unless interpolatable?(value)
+
+      resolved = value.gsub(/\${([^}]+)}/) do
+        var_name = Regexp.last_match(1)
+        if interpolated_config[var_name]
+          interpolated_config[var_name].to_s
+        else
+          return {
+            success: false,
+            info: "Undefined variable: ${#{var_name}}"
+          }
+        end
+      end
+
+      interpolated_config[key] = resolved
+    end
+
+    {
+      success: true,
+      config: interpolated_config
+    }
+  end
+
+  private
+
+  def interpolatable?(value)
+    value.is_a?(String) && value.include?('${')
+  end
+end
+
+class ConfigAccessor
+  def initialize(config:, default_values_manager:)
+    @config = config
+    @default_values_manager = default_values_manager
+  end
+
+  def get(key)
+    if nested?(key)
+      get_nested(key)
+    else
+      @config[key]
+    end
+  end
+
+  def set(key, value)
+    if nested?(key)
+      set_nested(key, value)
+    else
+      @config[key] = value
+    end
+  end
+
+  private
+
+  def nested?(key)
+    key.include?('.')
+  end
+
+  def get_nested(key)
+    @config.dig(*key.split('.'))
+  rescue StandardError
+    @default_values_manager.find_by(key)
+  end
+
+  def set_nested(key, value)
+    *prefix, last = key.split('.')
+    current = prefix.reduce(@config) { |hash, part| hash[part] ||= {} }
+    current[last] = value
+  end
+end
+
+class ConfigLoader
+  def initialize
+    @env_config_loader = EnvConfigLoader.new
+    @env_var_overrider = EnvVariableOverrider.new
+    @variable_interpolator = VariableInterpolator.new
+  end
+
+  def load(data:, environment:)
+    env_config = @env_config_loader.load(data:, environment:)
+
+    config_validator = ConfigLoadValidator.new(env_config)
+    validation_result = config_validator.validate
+
+    return validation_result unless validation_result[:success]
+
+    env_config = @env_var_overrider.override(env_config)
+    @variable_interpolator.interpolate(env_config)
+  end
+end
+
+class ConfigRegistry
+  def initialize
+    @configs = {}
+  end
+
+  def store(environment:, config:)
+    @configs[environment] = config
+  end
+
+  def find(environment)
+    config = @configs[environment]
+    raise "No config for environment: #{environment}" unless config
+
+    config
+  end
+
+  def all
+    @configs
+  end
+
+  def environment_exist?(environment)
+    @configs.key?(environment)
+  end
+end
+
 class DefaultValuesManager
   def initialize
     @default_values = {}
@@ -324,121 +488,38 @@ class ConfigManager
 
     data = parse_result[:data]
     @default_value_manager.store_defaults(data)
+    load_result = @config_loader.load(data:, environment:)
 
-    env_config = {}
-
-    if data['default']
-      data['default'].each do |key, value|
-        env_config[key] = value
-      end
+    unless load_result[:success]
+      puts load_result[:info]
+      return false
     end
 
-    if data[environment]
-      data[environment].each do |key, value|
-        env_config[key] = value
-      end
-    end
-
-    env_config.each do |key, value|
-      if key.end_with?('_required') && value.nil?
-        puts "Required config missing: #{key}"
-        return false
-      end
-
-      if (key.include?('port') || key.include?('timeout')) && (!value.is_a?(Integer) || value < 0)
-        puts "Invalid number for #{key}: #{value}"
-        return false
-      end
-
-      if (key.include?('url') || key.include?('host')) && (!value.is_a?(String) || value.empty?)
-        puts "Invalid string for #{key}: #{value}"
-        return false
-      end
-
-      next unless key.include?('enabled') || key.include?('debug')
-
-      unless [true, false].include?(value)
-        puts "Invalid boolean for #{key}: #{value}"
-        return false
-      end
-    end
-
-    env_config.each do |key, value|
-      env_key = "APP_#{key.upcase}"
-      next unless ENV[env_key]
-
-      env_config[key] = if value.is_a?(Integer)
-                          ENV[env_key].to_i
-                        elsif [true, false].include?(value)
-                          ENV[env_key].downcase == 'true'
-                        else
-                          ENV[env_key]
-                        end
-    end
-
-    env_config.each do |key, value|
-      next unless value.is_a?(String) && value.include?('${')
-
-      value.scan(/\${([^}]+)}/).each do |match|
-        var_name = match[0]
-        if env_config[var_name]
-          value = value.gsub("${#{var_name}}", env_config[var_name].to_s)
-        else
-          puts "Undefined variable: ${#{var_name}}"
-          return false
-        end
-      end
-      env_config[key] = value
-    end
-
-    @configs[environment] = env_config
+    config = load_result[:config]
+    @config_registry.store(environment:, config:)
     true
   end
 
   def get(key, environment = DEFAULT_ENVIRONMENT)
-    return @default_value_manager.find_by(key) unless @configs[environment]
+    return @default_value_manager.find_by(key) unless @config_registry.environment_exist?(environment)
 
-    value = @configs[environment][key]
-
-    if key.include?('.')
-      parts = key.split('.')
-      current = @configs[environment]
-
-      parts.each do |part|
-        return @default_value_manager.find_by(key) unless current.is_a?(Hash) && current[part]
-
-        current = current[part]
-      end
-
-      value = current
-    end
-
-    value
+    config = @config_registry.find(environment)
+    config_accessor = ConfigAccessor.new(config:, default_values_manager: @default_value_manager)
+    config_accessor.get(key)
   end
 
   def set(key, value, environment = DEFAULT_ENVIRONMENT)
-    @configs[environment] = {} unless @configs[environment]
+    @config_registry.store(environment:, config: {}) unless @config_registry.environment_exist?(environment)
 
-    if key.include?('.')
-      parts = key.split('.')
-      current = @configs[environment]
+    config = @config_registry.find(environment)
+    config_accessor = ConfigAccessor.new(config:, default_values_manager: @default_value_manager)
 
-      parts[0..-2].each do |part|
-        current[part] ||= {}
-        current = current[part]
-      end
-
-      current[parts.last] = value
-    else
-      @configs[environment][key] = value
-    end
+    config_accessor.set(key, value)
   end
 
   def reload
-    @environments.each do |env|
-      if @configs[env]
-        puts "Cannot reload #{env} config"
-      end
+    @environments.each do |environment|
+      puts "Cannot reload #{environment} config" if @config_registry.environment_exist?(environment)
     end
   end
 
