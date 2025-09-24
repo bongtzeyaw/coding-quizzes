@@ -1,0 +1,666 @@
+# frozen_string_literal: true
+
+class ValueCalculator
+  def self.calculate_total_value(price:, quantity:)
+    price * quantity
+  end
+end
+
+class Product
+  attr_reader :id, :name, :price
+
+  def initialize(id:, name:, price:)
+    @id = id
+    @name = name
+    @price = price
+  end
+end
+
+class ProductRepository
+  def initialize
+    @products = {}
+  end
+
+  def find_product_by(id)
+    @products[id][:product]
+  end
+
+  def all
+    @products.values
+  end
+
+  def product_found?(id)
+    @products.key?(id)
+  end
+
+  def add(product:, total_quantity:)
+    @products[product.id] = { product:, total_quantity: }
+  end
+
+  def reduce_total_quantity(product_id:, quantity:)
+    @products[product_id][:total_quantity] -= quantity
+  end
+end
+
+class Warehouse
+  attr_reader :id
+
+  def initialize(id)
+    @id = id
+    @inventory = {}
+  end
+
+  def stock(product_id)
+    @inventory[product_id]
+  end
+
+  def product_found?(product_id)
+    @inventory.key?(product_id)
+  end
+
+  def stock_positive?(product_id)
+    @inventory[product_id]&.positive?
+  end
+
+  def sufficient_stock?(product_id:, quantity:)
+    @inventory[product_id] >= quantity
+  end
+
+  def add_stock(product_id:, quantity:)
+    @inventory[product_id] ||= 0
+    @inventory[product_id] += quantity
+  end
+
+  def reduce_stock(product_id:, quantity:)
+    @inventory[product_id] -= quantity
+  end
+
+  def total_value_and_items(product_repository)
+    filtered_inventory = @inventory.filter_map do |product_id, quantity|
+      product = product_repository.find_product_by(product_id)
+
+      [product, quantity] if product && quantity.positive?
+    end
+
+    total_value = filtered_inventory.sum do |product, quantity|
+      ValueCalculator.calculate_total_value(price: product.price, quantity:)
+    end
+
+    total_items = filtered_inventory.sum { |_, quantity| quantity }
+
+    [total_value, total_items]
+  end
+end
+
+class WarehouseRepository
+  def initialize
+    @warehouses = {}
+  end
+
+  def find(id)
+    warehouse = @warehouses[id]
+    raise 'Warehouse not found' unless warehouse
+
+    warehouse
+  end
+
+  def find_or_create(id)
+    @warehouses[id] ||= Warehouse.new(id)
+  end
+
+  def all
+    @warehouses.values
+  end
+
+  def warehouses_with_stock(product_id)
+    @warehouses.select do |_warehouse_id, warehouse|
+      warehouse.stock_positive?(product_id)
+    end
+  end
+
+  def product_found_in_existing_warehouse?(product_id:, warehouse_id:)
+    warehouse = @warehouses[warehouse_id]
+    return false unless warehouse
+
+    warehouse.product_found?(product_id)
+  end
+
+  def sufficient_stock_in_existing_warehouse?(product_id:, warehouse_id:, quantity:)
+    warehouse = @warehouses[warehouse_id]
+    return false unless warehouse
+
+    warehouse.sufficient_stock?(product_id:, quantity:)
+  end
+
+  def add_stock(product_id:, warehouse_id:, quantity:)
+    warehouse = find_or_create(warehouse_id)
+
+    warehouse.add_stock(product_id:, quantity:)
+  end
+
+  def reduce_stock(product_id:, warehouse_id:, quantity:)
+    warehouse = @warehouses[warehouse_id]
+    raise 'Warehouse not found' unless warehouse
+
+    warehouse.reduce_stock(product_id:, quantity:)
+  end
+
+  def transfer_stock(product_id:, from_warehouse_id:, to_warehouse_id:, quantity:)
+    from_warehouse = find(from_warehouse_id)
+    to_warehouse = find_or_create(to_warehouse_id)
+
+    from_warehouse.reduce_stock(product_id:, quantity:)
+    to_warehouse.add_stock(product_id:, quantity:)
+  end
+end
+
+class Transaction
+  def initialize
+    @timestamp = Time.now.utc
+    @type = self.class::TYPE.to_s
+  end
+
+  def to_h
+    raise NotImplementedError, "#{self.class} must implement #to_h"
+  end
+end
+
+class ProductAdditionTransaction < Transaction
+  TYPE = :ADD
+
+  def initialize(product_id:, warehouse_id:, quantity:)
+    super()
+    @product_id = product_id
+    @warehouse_id = warehouse_id
+    @quantity = quantity
+  end
+
+  def to_h
+    {
+      type: @type,
+      product_id: @product_id,
+      warehouse_id: @warehouse_id,
+      quantity: @quantity,
+      timestamp: @timestamp
+    }
+  end
+end
+
+class StockTransferTransaction < Transaction
+  TYPE = :TRANSFER
+
+  def initialize(product_id:, from_warehouse_id:, to_warehouse_id:, quantity:)
+    super()
+    @product_id = product_id
+    @from_warehouse_id = from_warehouse_id
+    @to_warehouse_id = to_warehouse_id
+    @quantity = quantity
+  end
+
+  def to_h
+    {
+      type: @type,
+      product_id: @product_id,
+      from_warehouse: @from_warehouse_id,
+      to_warehouse: @to_warehouse_id,
+      quantity: @quantity,
+      timestamp: @timestamp
+    }
+  end
+end
+
+class ProductSaleTransaction < Transaction
+  TYPE = :SALE
+
+  def initialize(product_id:, warehouse_id:, quantity:, customer_name:, total_price:)
+    super()
+    @product_id = product_id
+    @warehouse_id = warehouse_id
+    @quantity = quantity
+    @customer_name = customer_name
+    @total_price = total_price
+  end
+
+  def to_h
+    {
+      type: @type,
+      product_id: @product_id,
+      warehouse_id: @warehouse_id,
+      quantity: @quantity,
+      customer: @customer_name,
+      total_price: @total_price,
+      timestamp: @timestamp
+    }
+  end
+end
+
+class TransactionLog
+  def initialize
+    @transactions = []
+  end
+
+  def record(transaction)
+    @transactions << transaction.to_h
+  end
+end
+
+class OperationResult
+  attr_reader :info
+
+  def initialize(success:, info: nil)
+    @success = success
+    @info = info
+  end
+
+  def success?
+    @success
+  end
+end
+
+class InventoryValidator
+  def validate
+    raise NotImplementedError, "#{self.class} must implement #validate"
+  end
+
+  private
+
+  def product_found_in_product_repository?(product_repository:, product_id:)
+    product_repository.product_found?(product_id)
+  end
+
+  def product_found_in_existing_warehouse?(warehouse_repository:, product_id:, warehouse_id:)
+    warehouse_repository.product_found_in_existing_warehouse?(product_id:, warehouse_id:)
+  end
+
+  def sufficient_stock_in_existing_warehouse?(warehouse_repository:, product_id:, warehouse_id:, quantity:)
+    warehouse_repository.sufficient_stock_in_existing_warehouse?(product_id:, warehouse_id:, quantity:)
+  end
+end
+
+class ProductAdditionValidator < InventoryValidator
+  def initialize(product_repository:, product_id:)
+    @product_repository = product_repository
+    @product_id = product_id
+  end
+
+  def validate
+    if product_found_in_product_repository?(
+      product_repository: @product_repository,
+      product_id: @product_id
+    )
+      return OperationResult.new(success: false, info: 'Product already exists')
+    end
+
+    OperationResult.new(success: true)
+  end
+end
+
+class StockTransferValidator < InventoryValidator
+  def initialize(warehouse_repository:, product_id:, from_warehouse_id:, quantity:)
+    @warehouse_repository = warehouse_repository
+    @product_id = product_id
+    @from_warehouse_id = from_warehouse_id
+    @quantity = quantity
+  end
+
+  def validate
+    unless product_found_in_existing_warehouse?(
+      warehouse_repository: @warehouse_repository,
+      product_id: @product_id,
+      warehouse_id: @from_warehouse_id
+    )
+      return OperationResult.new(success: false, info: 'Product not found in source warehouse')
+    end
+
+    unless sufficient_stock_in_existing_warehouse?(
+      warehouse_repository: @warehouse_repository,
+      product_id: @product_id,
+      warehouse_id: @from_warehouse_id,
+      quantity: @quantity
+    )
+      return OperationResult.new(success: false, info: 'Insufficient stock')
+    end
+
+    OperationResult.new(success: true)
+  end
+end
+
+class ProductSaleValidator < InventoryValidator
+  def initialize(product_repository:, warehouse_repository:, product_id:, warehouse_id:, quantity:)
+    @product_repository = product_repository
+    @warehouse_repository = warehouse_repository
+    @product_id = product_id
+    @warehouse_id = warehouse_id
+    @quantity = quantity
+  end
+
+  def validate
+    unless product_found_in_product_repository?(
+      product_repository: @product_repository,
+      product_id: @product_id
+    )
+      return OperationResult.new(success: false, info: 'Product not found')
+    end
+
+    unless product_found_in_existing_warehouse?(
+      warehouse_repository: @warehouse_repository,
+      product_id: @product_id,
+      warehouse_id: @warehouse_id
+    )
+      return OperationResult.new(success: false, info: 'Product not found in warehouse')
+    end
+
+    unless sufficient_stock_in_existing_warehouse?(
+      warehouse_repository: @warehouse_repository,
+      product_id: @product_id,
+      warehouse_id: @warehouse_id,
+      quantity: @quantity
+    )
+      return OperationResult.new(success: false, info: 'Insufficient stock')
+    end
+
+    OperationResult.new(success: true)
+  end
+end
+
+class Command
+  def initialize(product_repository:, warehouse_repository:, transaction_log:)
+    @product_repository = product_repository
+    @warehouse_repository = warehouse_repository
+    @transaction_log = transaction_log
+  end
+end
+
+class ProductAdditionCommand < Command
+  def execute(id:, name:, price:, warehouse_id:, quantity:)
+    product = Product.new(
+      id:,
+      name:,
+      price:
+    )
+
+    validator = ProductAdditionValidator.new(
+      product_repository: @product_repository,
+      product_id: id
+    )
+
+    validation_result = validator.validate
+
+    unless validation_result.success?
+      puts validation_result.info
+      return false
+    end
+
+    @product_repository.add(product:, total_quantity: quantity)
+
+    @warehouse_repository.add_stock(
+      product_id: id,
+      warehouse_id:,
+      quantity:
+    )
+
+    @transaction_log.record(ProductAdditionTransaction.new(
+                              product_id: id,
+                              warehouse_id:,
+                              quantity:
+                            ))
+
+    true
+  end
+end
+
+class StockTransferCommand < Command
+  def execute(product_id:, from_warehouse_id:, to_warehouse_id:, quantity:)
+    validator = StockTransferValidator.new(
+      warehouse_repository: @warehouse_repository,
+      product_id:,
+      from_warehouse_id:,
+      quantity:
+    )
+
+    validation_result = validator.validate
+
+    unless validation_result.success?
+      puts validation_result.info
+      return false
+    end
+
+    @warehouse_repository.transfer_stock(
+      product_id:,
+      from_warehouse_id:,
+      to_warehouse_id:,
+      quantity:
+    )
+
+    @transaction_log.record(StockTransferTransaction.new(
+                              product_id: product_id,
+                              from_warehouse_id: from_warehouse_id,
+                              to_warehouse_id: to_warehouse_id,
+                              quantity: quantity
+                            ))
+
+    true
+  end
+end
+
+class ProductSaleCommand < Command
+  def execute(product_id:, warehouse_id:, quantity:, customer_name:)
+    validator = ProductSaleValidator.new(
+      product_repository: @product_repository,
+      warehouse_repository: @warehouse_repository,
+      product_id:,
+      warehouse_id:,
+      quantity:
+    )
+
+    validation_result = validator.validate
+
+    unless validation_result.success?
+      puts validation_result.info
+      return nil
+    end
+
+    @warehouse_repository.reduce_stock(
+      product_id: product_id,
+      warehouse_id: warehouse_id,
+      quantity: quantity
+    )
+
+    @product_repository.reduce_total_quantity(product_id:, quantity:)
+
+    product = @product_repository.find_product_by(product_id)
+    total_price = ValueCalculator.calculate_total_value(price: product.price, quantity:)
+
+    @transaction_log.record(ProductSaleTransaction.new(
+                              product_id:,
+                              warehouse_id:,
+                              quantity:,
+                              customer_name:,
+                              total_price:
+                            ))
+
+    {
+      product: product.name,
+      quantity:,
+      total_price:
+    }
+  end
+end
+
+class ReportSection
+  def initialize(product_repository:, warehouse_repository:)
+    @product_repository = product_repository
+    @warehouse_repository = warehouse_repository
+  end
+
+  def generate
+    <<~REPORT
+      #{generate_header}
+      #{generate_content}
+    REPORT
+  end
+
+  private
+
+  def generate_header
+    <<~HEADER
+      #{self.class::TITLE}
+      =================
+    HEADER
+  end
+
+  def generate_content
+    raise NotImplementedError, "#{self.class} must implement #generate_content"
+  end
+end
+
+class ProductsReportSection < ReportSection
+  TITLE = 'INVENTORY REPORT'
+
+  private
+
+  def total_value(product, quantity)
+    ValueCalculator.calculate_total_value(price: product.price, quantity:)
+  end
+
+  def generate_locations_text(product_id, _product)
+    @warehouse_repository.warehouses_with_stock(product_id).map do |warehouse_id, warehouse|
+      "  #{warehouse_id}: #{warehouse.stock(product_id)} units"
+    end.join("\n")
+  end
+
+  def generate_content
+    @product_repository.all.map do |product_detail|
+      product = product_detail[:product]
+      total_quantity = product_detail[:total_quantity]
+
+      <<~CONTENT
+        Product: #{product.name}
+          Total Quantity: #{total_quantity}
+          Price: $#{product.price}
+          Total Value: $#{total_value(product, total_quantity)}
+          Locations:
+
+          #{generate_locations_text(product.id, product)}
+      CONTENT
+    end.join("\n")
+  end
+end
+
+class WarehousesReportSection < ReportSection
+  TITLE = 'WAREHOUSE REPORT'
+
+  private
+
+  def generate_content
+    @warehouse_repository.all.map do |warehouse|
+      total_value, total_items = warehouse.total_value_and_items(@product_repository)
+
+      <<~CONTENT
+        Warehouse: #{warehouse.id}
+          Total Items: #{total_items}
+          Total Value: $#{total_value}
+      CONTENT
+    end.join("\n")
+  end
+end
+
+class Report
+  def initialize(product_repository:, warehouse_repository:)
+    @product_repository = product_repository
+    @warehouse_repository = warehouse_repository
+  end
+
+  def generate
+    products_report_section = ProductsReportSection.new(
+      product_repository: @product_repository,
+      warehouse_repository: @warehouse_repository
+    ).generate
+
+    warehouses_report_section = WarehousesReportSection.new(
+      product_repository: @product_repository,
+      warehouse_repository: @warehouse_repository
+    ).generate
+
+    products_report_section + warehouses_report_section
+  end
+end
+
+class AlertService
+  def self.create_low_stock_alerts(product_repository:, threshold:)
+    product_repository.all.filter_map do |product_detail|
+      product = product_detail[:product]
+      quantity = product_detail[:total_quantity]
+
+      "LOW STOCK: #{product.name} - Only #{quantity} units remaining" if quantity < threshold
+    end
+  end
+end
+
+class InventoryManager
+  def initialize
+    @product_repository = ProductRepository.new
+    @warehouse_repository = WarehouseRepository.new
+    @transaction_log = TransactionLog.new
+  end
+
+  def add_product(id:, name:, price:, warehouse_id:, quantity:)
+    product_addition_command = ProductAdditionCommand.new(
+      product_repository: @product_repository,
+      warehouse_repository: @warehouse_repository,
+      transaction_log: @transaction_log
+    )
+
+    product_addition_command.execute(
+      id:,
+      name:,
+      price:,
+      warehouse_id:,
+      quantity:
+    )
+  end
+
+  def transfer_stock(product_id:, from_warehouse_id:, to_warehouse_id:, quantity:)
+    stock_transfer_command = StockTransferCommand.new(
+      product_repository: @product_repository,
+      warehouse_repository: @warehouse_repository,
+      transaction_log: @transaction_log
+    )
+
+    stock_transfer_command.execute(
+      product_id:,
+      from_warehouse_id:,
+      to_warehouse_id:,
+      quantity:
+    )
+  end
+
+  def sell_product(product_id:, warehouse_id:, quantity:, customer_name:)
+    product_sale_command = ProductSaleCommand.new(
+      product_repository: @product_repository,
+      warehouse_repository: @warehouse_repository,
+      transaction_log: @transaction_log
+    )
+
+    product_sale_command.execute(
+      product_id:,
+      warehouse_id:,
+      quantity:,
+      customer_name:
+    )
+  end
+
+  def get_inventory_report
+    Report.new(
+      product_repository: @product_repository,
+      warehouse_repository: @warehouse_repository
+    ).generate
+  end
+
+  def get_low_stock_alert(threshold: 10)
+    AlertService.create_low_stock_alerts(
+      product_repository: @product_repository,
+      threshold:
+    )
+  end
+end
