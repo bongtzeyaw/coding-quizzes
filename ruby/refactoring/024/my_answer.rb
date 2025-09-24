@@ -1,5 +1,256 @@
 # frozen_string_literal: true
 
+class ConfigValidator
+  def initialize(config)
+    @config = config
+  end
+
+  def validate
+    raise NotImplementedError, "#{self.class} must implement #validate"
+  end
+
+  private
+
+  def failure_result(info)
+    { success: false, info: }
+  end
+
+  def valid_integer?(value)
+    value.is_a?(Integer) && value >= 0
+  end
+
+  def valid_string?(value)
+    value.is_a?(String) && !value.empty?
+  end
+
+  def valid_boolean?(value)
+    [true, false].include?(value)
+  end
+end
+
+class RequiredFieldValidator < ConfigValidator
+  REQUIRED_FIELD_KEYWORD_SUFFIX = '_required'
+
+  def validate
+    required_config = @config.filter { |key, _| key.end_with?(REQUIRED_FIELD_KEYWORD_SUFFIX) }
+    key_with_missing_value, = required_config.find { |_, value| value.nil? }
+
+    return failure_result("Required config missing: #{key_with_missing_value}") if key_with_missing_value
+
+    { success: true }
+  end
+end
+
+class PortValidator < ConfigValidator
+  PORT_FIELD_KEYWORD = 'port'
+
+  def validate
+    port_config = @config.filter { |key, _| key.include?(PORT_FIELD_KEYWORD) }
+    invalid_key, invalid_value = port_config.find { |_key, value| !valid_integer?(value) }
+
+    return failure_result("Invalid number for #{invalid_key}: #{invalid_value}") if invalid_key
+
+    { success: true }
+  end
+end
+
+class TimeoutValidator < ConfigValidator
+  TIMEOUT_FIELD_KEYWORD = 'timeout'
+
+  def validate
+    timeout_config = @config.filter { |key, _| key.include?(TIMEOUT_FIELD_KEYWORD) }
+    invalid_key, invalid_value = timeout_config.find { |_key, value| !valid_integer?(value) }
+
+    return failure_result("Invalid number for #{invalid_key}: #{invalid_value}") if invalid_key
+
+    { success: true }
+  end
+end
+
+class UrlValidator < ConfigValidator
+  URL_FIELD_KEYWORD = 'url'
+
+  def validate
+    url_config = @config.filter { |key, _| key.include?(URL_FIELD_KEYWORD) }
+    invalid_key, invalid_value = url_config.find { |_key, value| !valid_string?(value) }
+
+    return failure_result("Invalid string for #{invalid_key}: #{invalid_value}") if invalid_key
+
+    { success: true }
+  end
+end
+
+class HostValidator < ConfigValidator
+  HOST_FIELD_KEYWORD = 'host'
+
+  def validate
+    host_config = @config.filter { |key, _| key.include?(HOST_FIELD_KEYWORD) }
+    invalid_key, invalid_value = host_config.find { |_key, value| !valid_string?(value) }
+
+    return failure_result("Invalid string for #{invalid_key}: #{invalid_value}") if invalid_key
+
+    { success: true }
+  end
+end
+
+class EnabledValidator < ConfigValidator
+  ENABLED_FIELD_KEYWORD = 'enabled'
+
+  def validate
+    enabled_config = @config.filter { |key, _| key.include?(ENABLED_FIELD_KEYWORD) }
+    invalid_key, invalid_value = enabled_config.find { |_key, value| !valid_boolean?(value) }
+
+    return failure_result("Invalid boolean for #{invalid_key}: #{invalid_value}") if invalid_key
+
+    { success: true }
+  end
+end
+
+class DebugValidator < ConfigValidator
+  DEBUG_FIELD_KEYWORD = 'debug'
+
+  def validate
+    debug_config = @config.filter { |key, _| key.include?(DEBUG_FIELD_KEYWORD) }
+    invalid_key, invalid_value = debug_config.find { |_key, value| !valid_boolean?(value) }
+
+    return failure_result("Invalid boolean for #{invalid_key}: #{invalid_value}") if invalid_key
+
+    { success: true }
+  end
+end
+
+class CircularReferenceValidator < ConfigValidator
+  def validate
+    errors = []
+
+    @config.each do |key, value|
+      errors << "Circular reference detected: #{key}" if circular_reference?(key, value)
+    end
+
+    if errors.empty?
+      { success: true }
+    else
+      failure_result(errors.join("\n"))
+    end
+  end
+
+  private
+
+  def circular_reference?(key, value)
+    value.is_a?(String) && value.include?("${#{key}}")
+  end
+end
+
+class UndefinedReferenceValidator < ConfigValidator
+  def validate
+    errors = []
+
+    @config.each do |key, value|
+      next unless value.is_a?(String) && value.include?('${')
+
+      value.scan(/\${([^}]+)}/).each do |(var_name)|
+        errors << "Undefined reference: ${#{var_name}} in #{key}" unless reference_defined?(var_name)
+      end
+    end
+
+    if errors.empty?
+      { success: true }
+    else
+      failure_result(errors.join("\n"))
+    end
+  end
+
+  private
+
+  def reference_defined?(var_name)
+    @config.key?(var_name)
+  end
+end
+
+class ConfigLoadValidator
+  def initialize(config)
+    @validators = [
+      RequiredFieldValidator.new(config),
+      PortValidator.new(config),
+      TimeoutValidator.new(config),
+      UrlValidator.new(config),
+      HostValidator.new(config),
+      EnabledValidator.new(config),
+      DebugValidator.new(config)
+    ]
+  end
+
+  def validate
+    @validators.each do |validator|
+      result = validator.validate
+      return result unless result[:success]
+    end
+
+    { success: true }
+  end
+end
+
+class ConfigManagerValidator
+  private
+
+  def failure_result(info)
+    { success: false, info: }
+  end
+end
+
+class LoadValidator < ConfigManagerValidator
+  def validate(file_path)
+    return failure_result("Config file not found: #{file_path}") unless !file_path.nil? && file_exists?(file_path)
+
+    { success: true }
+  end
+
+  private
+
+  def file_exists?(file_path)
+    File.exist?(File.expand_path(file_path, __dir__))
+  end
+end
+
+class ExportValidator < ConfigManagerValidator
+  def validate(config_registry:, environment:, format:)
+    return failure_result("No config for environment: #{environment}") unless config_registry.environment_exist?(environment)
+    return failure_result("Unknown format: #{format}") unless ConfigFormatterDispatcher.format_exists?(format)
+
+    { success: true }
+  end
+end
+
+class AllConfigValidator < ConfigManagerValidator
+  def initialize
+    @config_validator_classes = [
+      CircularReferenceValidator,
+      UndefinedReferenceValidator
+    ]
+  end
+
+  def validate(config_registry)
+    errors = []
+
+    config_registry.all.each do |environment, config|
+      puts "Validating #{environment}..."
+
+      @config_validator_classes.each do |config_validator_class|
+        validator = config_validator_class.new(config)
+        result = validator.validate
+
+        errors << result[:info] unless result[:success]
+      end
+    end
+
+    if errors.empty?
+      { success: true }
+    else
+      failure_result(errors.join("\n"))
+    end
+  end
+end
+
 class DefaultValuesManager
   def initialize
     @default_values = {}
@@ -55,8 +306,11 @@ class ConfigManager
   end
 
   def load_config(file_path, environment = DEFAULT_ENVIRONMENT)
-    unless File.exist?(file_path)
-      puts "Config file not found: #{file_path}"
+    validator = LoadValidator.new
+    validation_result = validator.validate(file_path)
+
+    unless validation_result[:success]
+      puts validation_result[:info]
       return false
     end
 
@@ -189,8 +443,11 @@ class ConfigManager
   end
 
   def export(environment = DEFAULT_ENVIRONMENT, format = DEFAULT_EXPORT_FORMAT)
-    unless @configs[environment]
-      puts "No config for environment: #{environment}"
+    validator = ExportValidator.new
+    validation_result = validator.validate(config_registry: @config_registry, environment:, format:)
+
+    unless validation_result[:success]
+      puts validation_result[:info]
       return nil
     end
 
@@ -212,31 +469,14 @@ class ConfigManager
   end
 
   def validate_all
-    valid = true
+    validator = AllConfigValidator.new
+    validation_result = validator.validate(@config_registry)
 
-    @configs.each do |env, config|
-      puts "Validating #{env}..."
-
-      config.each do |key, value|
-        if value.is_a?(String) && value.include?("${#{key}}")
-          puts "Circular reference detected: #{key}"
-          valid = false
-        end
-      end
-
-      config.each do |key, value|
-        next unless value.is_a?(String) && value.include?('${')
-
-        value.scan(/\${([^}]+)}/).each do |match|
-          var_name = match[0]
-          unless config[var_name]
-            puts "Undefined reference: ${#{var_name}} in #{key}"
-            valid = false
-          end
-        end
-      end
+    unless validation_result[:success]
+      puts validation_result[:info]
+      return false
     end
 
-    valid
+    true
   end
 end
