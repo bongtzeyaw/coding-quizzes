@@ -53,6 +53,8 @@ class Report
 end
 
 class PerformanceReport < Report
+  EXECUTION_TIME_MAXIMUM_THRESHOLD = 5.0
+
   def generate(service_name)
     <<~REPORT
       Performance Report for #{service_name}
@@ -65,7 +67,7 @@ class PerformanceReport < Report
   end
 
   def alert_triggered?
-    @metrics[:execution_time] > 5.0
+    @metrics[:execution_time] > EXECUTION_TIME_MAXIMUM_THRESHOLD
   end
 
   def alert_type
@@ -74,6 +76,8 @@ class PerformanceReport < Report
 end
 
 class AvailabilityReport < Report
+  SUCCESS_RATE_MINIMUM_THRESHOLD = 90.0
+
   def generate(service_name)
     <<~REPORT
       Availability Report for #{service_name}
@@ -84,7 +88,7 @@ class AvailabilityReport < Report
   end
 
   def alert_triggered?
-    @metrics[:success_rate] < 90.0
+    @metrics[:success_rate] < SUCCESS_RATE_MINIMUM_THRESHOLD
   end
 
   def alert_type
@@ -93,6 +97,8 @@ class AvailabilityReport < Report
 end
 
 class ErrorRateReport < Report
+  ERROR_COUNT_MAXIMUM_THRESHOLD = 10
+
   def generate(service_name)
     <<~REPORT
       Error Report for #{service_name}
@@ -104,7 +110,7 @@ class ErrorRateReport < Report
   end
 
   def alert_triggered?
-    @metrics[:error_count] > 10
+    @metrics[:error_count] > ERROR_COUNT_MAXIMUM_THRESHOLD
   end
 
   def alert_type
@@ -254,20 +260,21 @@ class PerformanceCollector < Collector
 end
 
 class AvailabilityCollector < Collector
+  TOTAL_COUNT = 10
+
   def collect
     success_count = 0
-    total_count = 10
 
-    total_count.times do
+    TOTAL_COUNT.times do
       success_count += 1 if @service.check_health
       sleep(1)
     end
 
-    success_rate = (success_count.to_f / total_count) * 100
+    success_rate = (success_count.to_f / TOTAL_COUNT) * 100
 
     {
       success_rate:,
-      failed_checks: total_count - success_count
+      failed_checks: TOTAL_COUNT - success_count
     }
   end
 end
