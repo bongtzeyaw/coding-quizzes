@@ -1,3 +1,26 @@
+class FileReader
+  class << self
+    def read(file_path)
+      File.read(File.expand_path(file_path, __dir__))
+    end
+  end
+end
+
+class YamlParser
+  class << self
+    def parse(content)
+      data = YAML.load(content)
+
+      { success: true, data: }
+    rescue StandardError => e
+      {
+        success: false,
+        info: "Failed to parse YAML: #{e.message}"
+      }
+    end
+  end
+end
+
 class ConfigManager
   def initialize
     @configs = {}
@@ -11,14 +34,15 @@ class ConfigManager
       return false
     end
 
-    content = File.read(file_path)
+    content = FileReader.read(file_path)
+    parse_result = YamlParser.parse(content)
 
-    begin
-      data = YAML.load(content)
-    rescue StandardError => e
-      puts "Failed to parse YAML: #{e.message}"
+    unless parse_result[:success]
+      puts parse_result[:info]
       return false
     end
+
+    data = parse_result[:data]
 
     env_config = {}
 
