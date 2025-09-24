@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 class DefaultValuesManager
   def initialize
     @default_values = {}
@@ -42,13 +44,17 @@ class YamlParser
 end
 
 class ConfigManager
+  DEFAULT_ENVIRONMENT = 'development'
+  DEFAULT_EXPORT_FORMAT = 'yaml'
+
   def initialize
     @configs = {}
     @environments = %w[development staging production]
     @default_value_manager = DefaultValuesManager.new
+    @environments = %w[development staging production].freeze
   end
 
-  def load_config(file_path, environment = 'development')
+  def load_config(file_path, environment = DEFAULT_ENVIRONMENT)
     unless File.exist?(file_path)
       puts "Config file not found: #{file_path}"
       return false
@@ -135,7 +141,7 @@ class ConfigManager
     true
   end
 
-  def get(key, environment = 'development')
+  def get(key, environment = DEFAULT_ENVIRONMENT)
     return @default_value_manager.find_by(key) unless @configs[environment]
 
     value = @configs[environment][key]
@@ -156,7 +162,7 @@ class ConfigManager
     value
   end
 
-  def set(key, value, environment = 'development')
+  def set(key, value, environment = DEFAULT_ENVIRONMENT)
     @configs[environment] = {} unless @configs[environment]
 
     if key.include?('.')
@@ -182,7 +188,7 @@ class ConfigManager
     end
   end
 
-  def export(environment = 'development', format = 'yaml')
+  def export(environment = DEFAULT_ENVIRONMENT, format = DEFAULT_EXPORT_FORMAT)
     unless @configs[environment]
       puts "No config for environment: #{environment}"
       return nil
