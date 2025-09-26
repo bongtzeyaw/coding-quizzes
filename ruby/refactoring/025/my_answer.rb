@@ -1,27 +1,64 @@
+class Document
+  attr_reader :id, :title, :content, :tags, :added_at
+
+  def initialize(id:, title:, content:, tags:)
+    @id = id
+    @title = title
+    @content = content
+    @tags = tags
+    @added_at = Time.now.utc
+  end
+end
+
+class DocumentRegistry
+  def initialize
+    @documents = {}
+  end
+
+  def document_exists?(id)
+    @documents.key?(id)
+  end
+
+  def add(document)
+    @documents[document.id] = document
+  end
+
+  def find_by(id)
+    @documents[id]
+  end
+
+  def count
+    @documents.length
+  end
+
+  def all
+    @documents.values
+  end
+end
+
 class SearchEngine
   def initialize
-    @documents = []
+    @document_registry = DocumentRegistry.new
     @index = {}
     @search_history = []
     @stop_words = %w[the a an and or but in on at to for]
   end
 
   def add_document(id, title, content, tags = [])
-    doc = {
-      id: id,
-      title: title,
-      content: content,
-      tags: tags,
-      added_at: Time.now
-    }
-
     existing = @documents.find { |d| d[:id] == id }
     if existing
       puts "Document already exists: #{id}"
       return false
     end
 
-    @documents << doc
+    document = Document.new(
+      id:,
+      title:,
+      content:,
+      tags:
+    )
+
+    @document_registry.add(document)
 
     words = title.downcase.split(/\W+/)
     words.each do |word|
