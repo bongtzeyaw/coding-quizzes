@@ -255,6 +255,246 @@ class QueryParser
   end
 end
 
+class Filter
+  def apply(document_results)
+    raise NotImplementedError, "#{self.class} must implement #apply"
+  end
+end
+
+class TagsFilter < Filter
+  def initialize(tags)
+    @tags = tags
+  end
+
+  def apply(document_results)
+    document_results.select do |result|
+      (result[:document].tags & @tags).any?
+    end
+  end
+end
+
+class DateFromFilter < Filter
+  def initialize(date_from)
+    @date_from = date_from
+  end
+
+  def apply(document_results)
+    document_results.select do |result|
+      result[:document].added_at >= @date_from
+    end
+  end
+end
+
+class DateToFilter < Filter
+  def initialize(date_to)
+    @date_to = date_to
+  end
+
+  def apply(document_results)
+    document_results.select do |result|
+      result[:document].added_at <= @date_to
+    end
+  end
+end
+
+class FilteringChain
+  def initialize(options)
+    @filters = build_filters(options)
+  end
+
+  def apply_filters(scored_results)
+    @filters.reduce(scored_results) { |result, filter| filter.apply(result) }
+  end
+
+  private
+
+  def build_filters(options)
+    filters = []
+
+    filters << TagsFilter.new(options[:tags]) if options[:tags]
+    filters << DateFromFilter.new(options[:date_from]) if options[:date_from]
+    filters << DateToFilter.new(options[:date_to]) if options[:date_to]
+
+    filters
+  end
+end
+
+class Sorter
+  def initialize(options)
+    @options = options
+  end
+
+  def sort(document_results)
+    raise NotImplementedError, "#{self.class} must implement #sort"
+  end
+end
+
+class DateSorter < Sorter
+  def sort(document_results)
+    sorted_results = document_results.sort_by { |result| result[:document].added_at }
+    @options[:order] == 'desc' ? sorted_results.reverse : sorted_results
+  end
+end
+
+class TitleSorter < Sorter
+  def sort(document_results)
+    document_results.sort_by { |result| result[:document].title }
+  end
+end
+
+class ScoreSorter < Sorter
+  def sort(document_results)
+    document_results.sort_by { |result| -result[:score] }
+  end
+end
+
+class SorterDispatcher
+  SORTER_MAP = {
+    date: DateSorter,
+    title: TitleSorter,
+    score: ScoreSorter
+  }.freeze
+
+  DEFAULT_SORT_BY = :score
+
+  class << self
+    def dispatch(sort_by)
+      return SORTER_MAP[DEFAULT_SORT_BY] unless sort_by
+
+      SORTER_MAP[sort_by.to_sym]
+    end
+  end
+end
+
+class Paginator
+  DEFAULT_PAGE = 1
+  DEFAULT_PER_PAGE = 10
+
+  attr_reader :page, :per_page
+
+  def initialize(results:, page:, per_page:)
+    @results = results
+    @page = page || DEFAULT_PAGE
+    @per_page = per_page || DEFAULT_PER_PAGE
+  end
+
+  def paginate
+    start_index = (page - 1) * @per_page
+    @results[start_index, @per_page] || []
+  end
+end
+
+class Highlighter
+  DEFAULT_HIGHLIGHT_TAG = 'mark'
+
+  def initialize(highlight_tag: DEFAULT_HIGHLIGHT_TAG)
+    @highlight_tag = highlight_tag
+  end
+
+  def highlight(text:, terms:)
+    terms.reduce(text.dup) do |highlighted, term|
+      highlighted.gsub(/#{Regexp.escape(term)}/i) { |match| "<#{@highlight_tag}>#{match}</#{@highlight_tag}>" }
+    end
+  end
+end
+
+class SearchResponse
+  def initialize(results:, total:, page:, per_page:)
+    @results = results
+    @total = total
+    @page = page
+    @per_page = per_page
+  end
+
+  def to_h
+    {
+      results: @results,
+      total: @total,
+      page: @page,
+      per_page: @per_page
+    }
+  end
+end
+
+class Searcher
+  def initialize(index_registry)
+    @index_registry = index_registry
+  end
+
+  def search(query:, document_registry:, options: {})
+    return [] if query.terms.empty?
+
+    matching_index_entries = find_matching_index_entries(query)
+    scores_by_document_id = calculate_scores_by_doc_id(matching_index_entries)
+    scores_by_document = find_documents(scores_by_document_id, document_registry)
+
+    filtered_results = apply_filters(scores_by_document, options)
+    sorted_results = apply_sorting(filtered_results, options)
+
+    pagination_results_details = paginate(sorted_results, options)
+    highlighted_results = apply_highlighting(pagination_results_details[:paginated_results], query.terms, options)
+
+    SearchResponse.new(
+      results: highlighted_results,
+      total: sorted_results.length,
+      page: pagination_results_details[:page],
+      per_page: pagination_results_details[:per_page]
+    ).to_h
+  end
+
+  private
+
+  def find_matching_index_entries(query)
+    query.terms.flat_map do |term|
+      @index_registry.find_entries_by(term.downcase) || []
+    end
+  end
+
+  def calculate_scores_by_doc_id(index_entries)
+    index_entries.each_with_object(Hash.new(0)) do |index_entry, scores|
+      scores[index_entry.document_id] += index_entry.score
+    end
+  end
+
+  def find_documents(scores_by_doc_id, document_registry)
+    scores_by_doc_id.each_with_object([]) do |(doc_id, score), results|
+      document = document_registry.find_by(doc_id)
+      results << { document:, score: } if document
+    end
+  end
+
+  def apply_filters(document_results, options)
+    FilteringChain.new(options).apply_filters(document_results)
+  end
+
+  def apply_sorting(document_results, options)
+    sorter_class = SorterDispatcher.dispatch(options[:sort_by])
+    sorter_class.new(options).sort(document_results)
+  end
+
+  def paginate(results, options)
+    paginator = Paginator.new(results:, page: options[:page], per_page: options[:per_page])
+
+    {
+      paginated_results: paginator.paginate,
+      page: paginator.page,
+      per_page: paginator.per_page
+    }
+  end
+
+  def apply_highlighting(results, terms, options)
+    return results unless options[:highlight]
+
+    highlighter = Highlighter.new
+
+    results.map do |result|
+      result.merge(
+        highlighted_content: highlighter.highlight(text: result[:document].content, terms: terms)
+      )
+    end
+  end
+end
+
 class SearchEngine
   def initialize
     @document_registry = DocumentRegistry.new
@@ -290,90 +530,8 @@ class SearchEngine
 
     query = @query_parser.parse(query_string)
     
-    terms = query.terms
-    operators = query.operators
-
-    results = []
-
-    return [] if terms.empty?
-
-    term_results = []
-    terms.each do |term|
-      term_lower = term.downcase
-
-      next unless @index[term_lower]
-
-      @index[term_lower].each do |entry|
-        term_results << entry
-      end
-    end
-
-    doc_scores = {}
-    term_results.each do |entry|
-      doc_scores[entry[:doc_id]] ||= 0
-      doc_scores[entry[:doc_id]] += entry[:score]
-    end
-
-    doc_scores.each do |doc_id, score|
-      doc = @documents.find { |d| d[:id] == doc_id }
-      next unless doc
-
-      results << {
-        document: doc,
-        score: score
-      }
-    end
-
-    if options[:tags]
-      results = results.select do |result|
-        (result[:document][:tags] & options[:tags]).any?
-      end
-    end
-
-    if options[:date_from]
-      results = results.select do |result|
-        result[:document][:added_at] >= options[:date_from]
-      end
-    end
-
-    if options[:date_to]
-      results = results.select do |result|
-        result[:document][:added_at] <= options[:date_to]
-      end
-    end
-
-    case options[:sort_by]
-    when 'date'
-      results.sort_by! { |r| r[:document][:added_at] }
-      results.reverse! if options[:order] == 'desc'
-    when 'title'
-      results.sort_by! { |r| r[:document][:title] }
-    else
-      results.sort_by! { |r| -r[:score] }
-    end
-
-    page = options[:page] || 1
-    per_page = options[:per_page] || 10
-    start_index = (page - 1) * per_page
-
-    paged_results = results[start_index, per_page] || []
-
-    if options[:highlight]
-      paged_results.each do |result|
-        highlighted_content = result[:document][:content].dup
-        terms.each do |term|
-          highlighted_content.gsub!(/#{term}/i, "<mark>#{term}</mark>")
-        end
-        result[:highlighted_content] = highlighted_content
-      end
-    end
-
-    {
-      results: paged_results,
-      total: results.length,
-      page: page,
-      per_page: per_page
-    }
+    searcher = Searcher.new(@index_registry)
+    searcher.search(query:, document_registry: @document_registry, options:)
   end
 
   def suggest(prefix, limit = 5)
