@@ -1,5 +1,72 @@
+class EnvironmentConfig
+  class << self
+    def to_h
+      {
+        'database_host' => self::DATABASE_HOST,
+        'database_port' => self::DATABASE_PORT,
+        'api_key' => self::API_KEY,
+        'cache_enabled' => self::CACHE_ENABLED,
+        'log_level' => self::LOG_LEVEL,
+        'timeout' => self::TIMEOUT
+      }
+    end
+  end
+end
+
+class DevelopmentConfig < EnvironmentConfig
+  DATABASE_HOST = 'localhost'
+  DATABASE_PORT = 5432
+  API_KEY = 'dev_key_123'
+  CACHE_ENABLED = false
+  LOG_LEVEL = 'debug'
+  TIMEOUT = 30
+end
+
+class StagingConfig < EnvironmentConfig
+  DATABASE_HOST = 'staging.db.com'
+  DATABASE_PORT = 5432
+  API_KEY = 'staging_key_456'
+  CACHE_ENABLED = true
+  LOG_LEVEL = 'info'
+  TIMEOUT = 60
+end
+
+class ProductionConfig < EnvironmentConfig
+  DATABASE_HOST = 'prod.db.com'
+  DATABASE_PORT = 5432
+  API_KEY = 'prod_key_789'
+  CACHE_ENABLED = true
+  LOG_LEVEL = 'warn'
+  TIMEOUT = 120
+end
+
+class TestConfig < EnvironmentConfig
+  DATABASE_HOST = 'test.db.com'
+  DATABASE_PORT = 5433
+  API_KEY = 'test_key_000'
+  CACHE_ENABLED = false
+  LOG_LEVEL = 'debug'
+  TIMEOUT = 10
+end
+
+class EnvironmentConfigDispatcher
+  ENVIRONMENT_CONFIG_MAP = {
+    development: DevelopmentConfig,
+    staging: StagingConfig,
+    production: ProductionConfig,
+    test: TestConfig
+  }.freeze
+
+  class << self
+    def dispatch(environment)
+      ENVIRONMENT_CONFIG_MAP[environment.to_sym]
+    end
+  end
+end
+
 class DynamicConfig
   CONFIG_PARAMS = %w[database_host database_port api_key cache_enabled log_level timeout].freeze
+  ENVIRONMENTS = %w[development staging production test].freeze
 
   def initialize(data = {})
     @data = data
@@ -19,63 +86,12 @@ class DynamicConfig
   end
 
   def get_environment_config(env)
-    case env
-    when 'development'
-      get_development_config
-    when 'staging'
-      get_staging_config
-    when 'production'
-      get_production_config
-    when 'test'
-      get_test_config
-    else
+    unless ENVIRONMENTS.include?(env)
       puts "Unknown environment: #{env}"
-      {}
+      return {}
     end
-  end
 
-  def get_development_config
-    {
-      'database_host' => 'localhost',
-      'database_port' => 5432,
-      'api_key' => 'dev_key_123',
-      'cache_enabled' => false,
-      'log_level' => 'debug',
-      'timeout' => 30
-    }
-  end
-
-  def get_staging_config
-    {
-      'database_host' => 'staging.db.com',
-      'database_port' => 5432,
-      'api_key' => 'staging_key_456',
-      'cache_enabled' => true,
-      'log_level' => 'info',
-      'timeout' => 60
-    }
-  end
-
-  def get_production_config
-    {
-      'database_host' => 'prod.db.com',
-      'database_port' => 5432,
-      'api_key' => 'prod_key_789',
-      'cache_enabled' => true,
-      'log_level' => 'warn',
-      'timeout' => 120
-    }
-  end
-
-  def get_test_config
-    {
-      'database_host' => 'test.db.com',
-      'database_port' => 5433,
-      'api_key' => 'test_key_000',
-      'cache_enabled' => false,
-      'log_level' => 'debug',
-      'timeout' => 10
-    }
+    send("get_#{env}_config")
   end
 
   def validate_config
@@ -130,6 +146,14 @@ class DynamicConfig
         old_value = @data[param]
         @data[param] = new_value
         notify_observers(key: param, old_value:, new_value:)
+      end
+    end
+  end
+
+  def define_environment_config_accessors
+    ENVIRONMENTS.each do |env|
+      self.class.define_method("get_#{env}_config") do
+        EnvironmentConfigDispatcher.dispatch(env).to_h
       end
     end
   end
