@@ -36,10 +36,133 @@ class DocumentRegistry
   end
 end
 
+class IndexScoreStrategy
+  SCORES = {
+    title: 10,
+    content: 1,
+    tag: 5
+  }.freeze
+
+  class << self
+    def score(field_type)
+      score = SCORES[field_type]
+      raise "Score not defined for field type: #{field_type}" unless score
+
+      score
+    end
+  end
+end
+
+class IndexabilityAnalyzer
+  STOP_WORDS = %w[the a an and or but in on at to for].freeze
+
+  def analyze(text)
+    words = text.downcase
+                .split(/\W+/)
+
+    words.filter { |word| indexable?(word) }
+  end
+
+  private
+
+  def indexable?(word)
+    !word.empty? && !STOP_WORDS.include?(word)
+  end
+end
+
+class IndexEntry
+  attr_reader :document_id, :score
+
+  def initialize(document_id:, field:, score:)
+    @document_id = document_id
+    @field = field
+    @score = score
+  end
+end
+
+class Indexer
+  def initialize(index_registry)
+    @index_registry = index_registry
+    @analyzer = IndexabilityAnalyzer.new
+  end
+
+  def index_document(document)
+    index_field(document.id, :title, document.title)
+    index_field(document.id, :content, document.content)
+    index_tags(document.id, document.tags)
+  end
+
+  private
+
+  def find_score(field_type)
+    IndexScoreStrategy.score(field_type)
+  end
+
+  def index_field(document_id, field_type, text)
+    score = find_score(field_type)
+    indexable_words = @analyzer.analyze(text)
+
+    indexable_words.each do |word|
+      index_entry = IndexEntry.new(
+        document_id: document_id,
+        field: field_type.to_s,
+        score:
+      )
+
+      @index_registry.add_entry(word:, index_entry:)
+    end
+  end
+
+  def index_tags(document_id, tags)
+    field_type = :tag
+    score = find_score(field_type)
+
+    tags.each do |tag|
+      tag_key = "tag:#{tag.downcase}"
+
+      index_entry = IndexEntry.new(
+        document_id: document_id,
+        field: field_type.to_s,
+        score:
+      )
+
+      @index_registry.add_entry(word: tag_key, index_entry:)
+    end
+  end
+end
+
+class IndexRegistry
+  def initialize
+    @index = {}
+  end
+
+  def add_entry(word:, index_entry:)
+    @index[word] ||= []
+    @index[word] << index_entry
+  end
+
+  def find_entries_by(word)
+    @index[word]
+  end
+
+  def clear
+    @index.clear
+  end
+
+  def keys
+    @index.keys
+  end
+
+  def word_frequency(word)
+    entries = find_entries_by(word)
+    entries ? entries.length : 0
+  end
+end
+
 class SearchEngine
   def initialize
     @document_registry = DocumentRegistry.new
-    @index = {}
+    @index_registry = IndexRegistry.new
     @search_history = []
     @stop_words = %w[the a an and or but in on at to for]
   end
@@ -60,27 +183,8 @@ class SearchEngine
 
     @document_registry.add(document)
 
-    words = title.downcase.split(/\W+/)
-    words.each do |word|
-      next if word.empty? || @stop_words.include?(word)
-
-      @index[word] ||= []
-      @index[word] << { doc_id: id, field: 'title', score: 10 }
-    end
-
-    words = content.downcase.split(/\W+/)
-    words.each do |word|
-      next if word.empty? || @stop_words.include?(word)
-
-      @index[word] ||= []
-      @index[word] << { doc_id: id, field: 'content', score: 1 }
-    end
-
-    tags.each do |tag|
-      tag_key = "tag:#{tag.downcase}"
-      @index[tag_key] ||= []
-      @index[tag_key] << { doc_id: id, field: 'tag', score: 5 }
-    end
+    indexer = Indexer.new(@index_registry)
+    indexer.index_document(document)
 
     true
   end
