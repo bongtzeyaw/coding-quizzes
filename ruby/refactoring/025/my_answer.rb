@@ -159,6 +159,102 @@ class IndexRegistry
   end
 end
 
+class Token
+  attr_reader :value, :type
+
+  def initialize(value)
+    @value = value
+    @type = self.class::TYPE
+  end
+end
+
+class QueryTermToken < Token
+  TYPE = :term
+end
+
+class QueryOperatorToken < Token
+  TYPE = :operator
+end
+
+class QueryTokenizer
+  QUERY_OPERATOR_INDICATORS = %w[AND OR NOT].freeze
+
+  attr_reader :tokens
+
+  def initialize(query_string)
+    @query_string = query_string
+    @tokens = []
+  end
+
+  def tokenize
+    current_token = ''
+    state = :normal
+
+    @query_string.each_char do |char|
+      case state
+      when :normal
+        case char
+        when '"'
+          state = :quoted
+        when ' '
+          add_token(current_token)
+          current_token = ''
+        else
+          current_token += char
+        end
+      when :quoted
+        if char == '"'
+          state = :normal
+        else
+          current_token += char
+        end
+      end
+    end
+
+    add_token(current_token)
+  end
+
+  private
+
+  def add_token(token)
+    return if token.empty?
+
+    @tokens << if QUERY_OPERATOR_INDICATORS.include?(token)
+                 QueryOperatorToken.new(token)
+               else
+                 QueryTermToken.new(token)
+               end
+  end
+end
+
+class Query
+  attr_reader :terms, :operators
+
+  def initialize(terms:, operators:)
+    @terms = terms
+    @operators = operators
+  end
+end
+
+class QueryParser
+  def parse(query_string)
+    parser = QueryTokenizer.new(query_string)
+    parser.tokenize
+    tokens = parser.tokens
+
+    terms = filter_tokens_by_type(tokens, :term).map(&:value)
+    operators = filter_tokens_by_type(tokens, :operator).map(&:value)
+
+    Query.new(terms:, operators:)
+  end
+
+  private
+
+  def filter_tokens_by_type(tokens, type)
+    tokens.select { |token| token.type == type }
+  end
+end
+
 class SearchEngine
   def initialize
     @document_registry = DocumentRegistry.new
@@ -192,27 +288,10 @@ class SearchEngine
   def search(query, options = {})
     @search_history << { query: query, timestamp: Time.now }
 
-    terms = []
-    operators = []
-    current_term = ''
-    in_quotes = false
-
-    query.chars.each_with_index do |char, i|
-      if char == '"'
-        in_quotes = !in_quotes
-      elsif char == ' ' && !in_quotes
-        if %w[AND OR NOT].include?(current_term)
-          operators << current_term
-        elsif !current_term.empty?
-          terms << current_term
-        end
-        current_term = ''
-      else
-        current_term += char
-      end
-
-      terms << current_term if i == query.length - 1 && !current_term.empty?
-    end
+    query = @query_parser.parse(query_string)
+    
+    terms = query.terms
+    operators = query.operators
 
     results = []
 
