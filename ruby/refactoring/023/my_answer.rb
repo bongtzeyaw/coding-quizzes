@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require 'concurrent-ruby'
+
 class Topic
   DEFAULT_MAX_RETRIES = 3
   DEFAULT_RETENTION_PERIOD = 24 * 60 * 60
@@ -275,11 +277,26 @@ class SyncDeliveryStrategy < DeliveryStrategy
 end
 
 class AsyncDeliveryStrategy < DeliveryStrategy
+  MIN_ACTIVE_WORKER_COUNT = 1
+  DEFAULT_WORKER_COUNT = 10
+  QUEUE_SIZE = 100
+
+  @@thread_pool = Concurrent::ThreadPoolExecutor.new(
+    min_threads: MIN_ACTIVE_WORKER_COUNT,
+    max_threads: DEFAULT_WORKER_COUNT,
+    max_queue: QUEUE_SIZE,
+    fallback_policy: :caller_runs
+  )
+
   def with_strategy
-    Thread.new do
+    Concurrent::Future.execute(executor: @@thread_pool) do
       sleep(delay_factor)
       yield
     end
+  end
+
+  def self.thread_pool
+    @@thread_pool
   end
 
   private
@@ -339,7 +356,7 @@ class DeliveryExecutor
     @message.retry_count += 1
     @message.last_error = error.message
 
-    Thread.new do
+    Concurrent::Future.execute(executor: AsyncDeliveryStrategy.thread_pool) do
       sleep(@message.retry_count * 2)
       execute
     end
@@ -415,6 +432,12 @@ class MessageQueue
     @message_registry = MessageRegistry.new
     @subscriber_registry = SubscriberRegistry.new
     @delivery_service = DeliveryService.new
+  end
+
+  def shutdown
+    pool = AsyncDeliveryStrategy.thread_pool
+    pool.shutdown
+    pool.wait_for_termination
   end
 
   def create_topic(topic_name, options = {})
