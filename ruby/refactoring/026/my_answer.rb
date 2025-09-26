@@ -1,57 +1,11 @@
 class DynamicConfig
+  CONFIG_PARAMS = %w[database_host database_port api_key cache_enabled log_level timeout].freeze
+
   def initialize(data = {})
     @data = data
     @observers = []
-  end
-
-  def database_host
-    @data['database_host']
-  end
-
-  def database_host=(value)
-    old_value = @data['database_host']
-    @data['database_host'] = value
-    notify_observers('database_host', old_value, value)
-  end
-
-  def database_port
-    @data['database_port']
-  end
-
-  def database_port=(value)
-    old_value = @data['database_port']
-    @data['database_port'] = value
-    notify_observers('database_port', old_value, value)
-  end
-
-  def api_key
-    @data['api_key']
-  end
-
-  def api_key=(value)
-    old_value = @data['api_key']
-    @data['api_key'] = value
-    notify_observers('api_key', old_value, value)
-  end
-
-  def cache_enabled
-    @data['cache_enabled']
-  end
-
-  def cache_enabled=(value)
-    old_value = @data['cache_enabled']
-    @data['cache_enabled'] = value
-    notify_observers('cache_enabled', old_value, value)
-  end
-
-  def log_level
-    @data['log_level']
-  end
-
-  def log_level=(value)
-    old_value = @data['log_level']
-    @data['log_level'] = value
-    notify_observers('log_level', old_value, value)
+    define_config_param_accessors
+    define_config_param_setters
   end
 
   def timeout
@@ -158,5 +112,25 @@ class DynamicConfig
   def method_missing(method_name, *args)
     puts "Unknown method: #{method_name}"
     nil
+  end
+
+  private
+
+  def define_config_param_accessors
+    CONFIG_PARAMS.each do |param|
+      self.class.define_method(param) do
+        @data[param]
+      end
+    end
+  end
+
+  def define_config_param_setters
+    CONFIG_PARAMS.each do |param|
+      self.class.define_method("#{param}=") do |new_value|
+        old_value = @data[param]
+        @data[param] = new_value
+        notify_observers(key: param, old_value:, new_value:)
+      end
+    end
   end
 end
