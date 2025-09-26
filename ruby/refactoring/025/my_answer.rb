@@ -495,11 +495,42 @@ class Searcher
   end
 end
 
+class HistoryEntry
+  attr_reader :query_string
+
+  def initialize(query_string)
+    @query_string = query_string
+    @timestamp = Time.now.utc
+  end
+end
+
+class SearchHistory
+  def initialize
+    @entries = []
+  end
+
+  def record(query_string)
+    @entries << HistoryEntry.new(query_string)
+  end
+
+  def query_frequency
+    frequency = @entries.each_with_object(Hash.new(0)) do |entry, counts|
+      counts[entry.query_string] += 1
+    end
+
+    frequency.sort_by { |_, count| -count }
+  end
+
+  def count
+    @entries.length
+  end
+end
+
 class SearchEngine
   def initialize
     @document_registry = DocumentRegistry.new
     @index_registry = IndexRegistry.new
-    @search_history = []
+    @search_history = SearchHistory.new
     @stop_words = %w[the a an and or but in on at to for]
   end
 
@@ -526,7 +557,7 @@ class SearchEngine
   end
 
   def search(query, options = {})
-    @search_history << { query: query, timestamp: Time.now }
+    @search_history.record(query)
 
     query = @query_parser.parse(query_string)
     
