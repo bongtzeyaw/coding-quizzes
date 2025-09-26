@@ -1,3 +1,123 @@
+# frozen_string_literal: true
+
+class ConfigParamValidator
+  def initialize(config)
+    @config = config
+  end
+
+  def validate
+    raise NotImplementedError, "#{self.class} must implement #validate"
+  end
+
+  private
+
+  def failure_result(info)
+    { success: false, info: }
+  end
+end
+
+class HostValidator < ConfigParamValidator
+  def validate
+    return failure_result('database_host is required') unless host_valid?(@config['database_host'])
+
+    { success: true }
+  end
+
+  private
+
+  def host_valid?(host)
+    !host.nil? && !host.empty?
+  end
+end
+
+class PortValidator < ConfigParamValidator
+  MINIMUM_PORT_NUMBER = 1
+  MAXIMUM_PORT_NUMBER = 65_535
+
+  def validate
+    return failure_result("database_port must be an integer between #{MINIMUM_PORT_NUMBER} and #{MAXIMUM_PORT_NUMBER}") unless port_valid?(@config['database_port'])
+
+    { success: true }
+  end
+
+  private
+
+  def port_valid?(port)
+    !port.nil? && port.is_a?(Integer) && port.between?(MINIMUM_PORT_NUMBER, MAXIMUM_PORT_NUMBER)
+  end
+end
+
+class ApiKeyValidator < ConfigParamValidator
+  MINIMUM_API_KEY_LENGTH = 8
+
+  def validate
+    return failure_result("api_key must be at least #{MINIMUM_API_KEY_LENGTH} characters") unless api_key_valid?(@config['api_key'])
+
+    { success: true }
+  end
+
+  private
+
+  def api_key_valid?(api_key)
+    !api_key.nil? && api_key.length >= MINIMUM_API_KEY_LENGTH
+  end
+end
+
+class LogLevelValidator < ConfigParamValidator
+  VALID_LOG_LEVELS = %w[debug info warn error].freeze
+
+  def validate
+    return failure_result("log_level must be one of: #{VALID_LOG_LEVELS.join(', ')}") unless log_level_valid?(@config['log_level'])
+
+    { success: true }
+  end
+
+  private
+
+  def log_level_valid?(log_level)
+    VALID_LOG_LEVELS.include?(log_level)
+  end
+end
+
+class TimeoutValidator < ConfigParamValidator
+  def validate
+    return failure_result('timeout must be a positive integer') unless timeout_valid?(@config['timeout'])
+
+    { success: true }
+  end
+
+  private
+
+  def timeout_valid?(timeout)
+    !timeout.nil? && timeout.is_a?(Integer) && timeout.positive?
+  end
+end
+
+class ConfigValidator
+  def initialize(config)
+    @validators = [
+      HostValidator.new(config),
+      PortValidator.new(config),
+      ApiKeyValidator.new(config),
+      LogLevelValidator.new(config),
+      TimeoutValidator.new(config)
+    ]
+  end
+
+  def validate
+    validation_errors = @validators.each_with_object([]) do |validator, errors|
+      result = validator.validate
+      errors << result[:info] unless result[:success]
+    end
+
+    if validation_errors.empty?
+      { success: true }
+    else
+      { success: false, info: validation_errors }
+    end
+  end
+end
+
 class EnvironmentConfig
   class << self
     def to_h
@@ -83,16 +203,7 @@ class DynamicConfig
     @observers = []
     define_config_param_accessors
     define_config_param_setters
-  end
-
-  def timeout
-    @data['timeout']
-  end
-
-  def timeout=(value)
-    old_value = @data['timeout']
-    @data['timeout'] = value
-    notify_observers('timeout', old_value, value)
+    define_environment_config_accessors
   end
 
   def get_environment_config(env)
@@ -105,24 +216,10 @@ class DynamicConfig
   end
 
   def validate_config
-    errors = []
+    result = ConfigValidator.new(@data).validate
+    return result[:info] unless result[:success]
 
-    errors << 'database_host is required' if @data['database_host'].nil? || @data['database_host'].empty?
-
-    port = @data['database_port']
-    if port.nil? || !port.is_a?(Integer) || port < 1 || port > 65_535
-      errors << 'database_port must be an integer between 1 and 65535'
-    end
-
-    errors << 'api_key must be at least 8 characters' if @data['api_key'].nil? || @data['api_key'].length < 8
-
-    valid_levels = %w[debug info warn error]
-    errors << "log_level must be one of: #{valid_levels.join(', ')}" unless valid_levels.include?(@data['log_level'])
-
-    timeout = @data['timeout']
-    errors << 'timeout must be a positive integer' if timeout.nil? || !timeout.is_a?(Integer) || timeout < 1
-
-    errors
+    []
   end
 
   def add_observer(&block)
@@ -136,8 +233,9 @@ class DynamicConfig
   end
 
   def method_missing(method_name, *args)
-    puts "Unknown method: #{method_name}"
-    nil
+    puts "Unknown method: #{method_name}" unless self.class.method_defined?(method_name)
+
+    puts "Method is defined"
   end
 
   private
