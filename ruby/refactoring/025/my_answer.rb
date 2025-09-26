@@ -553,6 +553,70 @@ class SuggestionEngine
   end
 end
 
+class StatisticsReport
+  def initialize(document_count:, indexed_word_count:, tag_count:, search_history_count:, top_queries:)
+    @document_count = document_count
+    @indexed_word_count = indexed_word_count
+    @tag_count = tag_count
+    @search_history_count = search_history_count
+    @top_queries = top_queries
+  end
+
+  def to_s
+    <<~REPORT
+      Search Engine Statistics:
+        Documents: #{@document_count}
+        Indexed words: #{@indexed_word_count}
+        Tags: #{@tag_count}
+        Search history: #{@search_history_count} queries
+        Top queries:
+        #{format_top_queries}
+    REPORT
+  end
+
+  private
+
+  def format_top_queries
+    @top_queries.map do |query, count|
+      "    #{query}: #{count} times"
+    end.join("\n")
+  end
+end
+
+class Statistics
+  DEFAULT_TOP_QUERY_LIMIT = 5
+
+  def initialize(document_registry:, index_registry:, search_history:)
+    @document_registry = document_registry
+    @index_registry = index_registry
+    @search_history = search_history
+  end
+
+  def generate_report
+    StatisticsReport.new(
+      document_count: @document_registry.count,
+      indexed_word_count: count_indexed_words,
+      tag_count: count_tags,
+      search_history_count: @search_history.count,
+      top_queries: @search_history.query_frequency.take(DEFAULT_TOP_QUERY_LIMIT)
+    ).to_s
+  end
+
+  private
+
+  def tag?(word)
+    word.start_with?('tag:')
+  end
+
+  def count_indexed_words
+    @index_registry.keys.reject { |word| tag?(word) }.length
+  end
+
+  def count_tags
+    @index_registry.keys.select { |word| tag?(word) }.length
+  end
+end
+
 class SearchEngine
   def initialize
     @document_registry = DocumentRegistry.new
@@ -597,23 +661,13 @@ class SearchEngine
   end
 
   def get_stats
-    puts 'Search Engine Statistics:'
-    puts "  Documents: #{@documents.length}"
-    puts "  Indexed words: #{@index.keys.reject { |k| k.start_with?('tag:') }.length}"
-    puts "  Tags: #{@index.keys.select { |k| k.start_with?('tag:') }.length}"
-    puts "  Search history: #{@search_history.length} queries"
+    report = Statistics.new(
+      document_registry: @document_registry,
+      index_registry: @index_registry,
+      search_history: @search_history
+    ).generate_report
 
-    query_counts = {}
-    @search_history.each do |entry|
-      query_counts[entry[:query]] ||= 0
-      query_counts[entry[:query]] += 1
-    end
-
-    top_queries = query_counts.sort_by { |_, count| -count }.take(5)
-    puts '  Top queries:'
-    top_queries.each do |query, count|
-      puts "    #{query}: #{count} times"
-    end
+    puts report
   end
 
   def reindex
