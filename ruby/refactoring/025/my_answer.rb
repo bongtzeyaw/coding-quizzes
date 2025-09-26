@@ -526,6 +526,33 @@ class SearchHistory
   end
 end
 
+class SuggestionEngine
+  DEFAULT_LIMIT = 5
+
+  def initialize(index_registry)
+    @index_registry = index_registry
+  end
+
+  def suggest(prefix:, limit:)
+    limit ||= DEFAULT_LIMIT
+
+    candidates = find_candidates(prefix)
+    rank_candidates(candidates).take(limit)
+  end
+
+  private
+
+  def find_candidates(prefix)
+    @index_registry.keys.select do |word|
+      word.start_with?(prefix.downcase) && !word.start_with?('tag:')
+    end
+  end
+
+  def rank_candidates(candidates)
+    candidates.sort_by { |word| -@index_registry.word_frequency(word) }
+  end
+end
+
 class SearchEngine
   def initialize
     @document_registry = DocumentRegistry.new
@@ -566,15 +593,7 @@ class SearchEngine
   end
 
   def suggest(prefix, limit = 5)
-    suggestions = []
-
-    @index.keys.each do |word|
-      suggestions << word if word.start_with?(prefix.downcase) && !word.start_with?('tag:')
-    end
-
-    suggestions.sort_by! { |word| -@index[word].length }
-
-    suggestions.take(limit)
+    SuggestionEngine.new(@index_registry).suggest(prefix:, limit:)
   end
 
   def get_stats
