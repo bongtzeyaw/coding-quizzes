@@ -236,13 +236,10 @@ class TasksExecutor
     @completed_tasks = []
     @failed_tasks = []
     @running = true
-    @mutex = Mutex.new
   end
 
   def find_executed_task_by(id)
-    @mutex.synchronize do
-      (@completed_tasks + @failed_tasks).find { |task| task.id == id }
-    end
+    (@completed_tasks + @failed_tasks).find { |task| task.id == id }
   end
 
   def setup
@@ -271,21 +268,15 @@ class TasksExecutor
   end
 
   def completed_count
-    @mutex.synchronize do
-      @completed_tasks.length
-    end
+    @completed_tasks.length
   end
 
   def failed_count
-    @mutex.synchronize do
-      @failed_tasks.length
-    end
+    @failed_tasks.length
   end
 
   def add_failed_task(task)
-    @mutex.synchronize do
-      @failed_tasks << task
-    end
+    @failed_tasks << task
   end
 
   private
@@ -295,9 +286,7 @@ class TasksExecutor
   end
 
   def add_completed_task(task)
-    @mutex.synchronize do
-      @completed_tasks << task
-    end
+    @completed_tasks << task
   end
 
   def execute_success_callback(task, result)
@@ -313,38 +302,27 @@ end
 class PriorityQueue
   def initialize
     @tasks = []
-    @mutex = Mutex.new
   end
 
   def find_task_in_queue_by(id)
-    @mutex.synchronize do
-      @tasks.find { |task| task.id == id }
-    end
+    @tasks.find { |task| task.id == id }
   end
 
   def enqueue(task)
-    @mutex.synchronize do
-      insert_position = @tasks.bsearch_index { |task_in_queue| task.priority >= task_in_queue.priority } || @tasks.length
-      @tasks.insert(insert_position, task)
-    end
+    insert_position = @tasks.bsearch_index { |task_in_queue| task.priority >= task_in_queue.priority } || @tasks.length
+    @tasks.insert(insert_position, task)
   end
 
   def dequeue
-    @mutex.synchronize do
-      @tasks.shift
-    end
+    @tasks.shift
   end
 
   def pending_count
-    @mutex.synchronize do
-      @tasks.count { |task| task.status_equal?(:pending) }
-    end
+    @tasks.count { |task| task.status_equal?(:pending) }
   end
 
   def empty?
-    @mutex.synchronize do
-      @tasks.empty?
-    end
+    @tasks.empty?
   end
 end
 
