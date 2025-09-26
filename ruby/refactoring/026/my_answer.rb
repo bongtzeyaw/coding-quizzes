@@ -64,6 +64,16 @@ class EnvironmentConfigDispatcher
   end
 end
 
+class ConfigObserver
+  def initialize(&block)
+    @callback = block
+  end
+
+  def notify(key:, old_value:, new_value:)
+    @callback.call(key, old_value, new_value)
+  end
+end
+
 class DynamicConfig
   CONFIG_PARAMS = %w[database_host database_port api_key cache_enabled log_level timeout].freeze
   ENVIRONMENTS = %w[development staging production test].freeze
@@ -116,12 +126,12 @@ class DynamicConfig
   end
 
   def add_observer(&block)
-    @observers << block
+    @observers << ConfigObserver.new(&block)
   end
 
-  def notify_observers(key, old_value, new_value)
+  def notify_observers(key:, old_value:, new_value:)
     @observers.each do |observer|
-      observer.call(key, old_value, new_value)
+      observer.notify(key: key, old_value:, new_value:)
     end
   end
 
