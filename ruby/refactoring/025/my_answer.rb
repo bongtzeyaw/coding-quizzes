@@ -1,3 +1,21 @@
+# frozen_string_literal: true
+
+class Validator
+  private
+
+  def failure_result(info)
+    { success: false, info: }
+  end
+end
+
+class DocumentAdditionValidator < Validator
+  def validate(id:, document_registry:)
+    return failure_result("Document already exists: #{id}") if document_registry.document_exists?(id)
+
+    { success: true }
+  end
+end
+
 class Document
   attr_reader :id, :title, :content, :tags, :added_at
 
@@ -622,13 +640,15 @@ class SearchEngine
     @document_registry = DocumentRegistry.new
     @index_registry = IndexRegistry.new
     @search_history = SearchHistory.new
-    @stop_words = %w[the a an and or but in on at to for]
+    @query_parser = QueryParser.new
   end
 
-  def add_document(id, title, content, tags = [])
-    existing = @documents.find { |d| d[:id] == id }
-    if existing
-      puts "Document already exists: #{id}"
+  def add_document(id:, title:, content:, tags: [])
+    validator = DocumentAdditionValidator.new
+    validation_result = validator.validate(id:, document_registry: @document_registry)
+
+    unless validation_result[:success]
+      puts validation_result[:info]
       return false
     end
 
@@ -647,16 +667,16 @@ class SearchEngine
     true
   end
 
-  def search(query, options = {})
-    @search_history.record(query)
+  def search(query_string:, options: {})
+    @search_history.record(query_string)
 
     query = @query_parser.parse(query_string)
-    
+
     searcher = Searcher.new(@index_registry)
     searcher.search(query:, document_registry: @document_registry, options:)
   end
 
-  def suggest(prefix, limit = 5)
+  def suggest(prefix:, limit: nil)
     SuggestionEngine.new(@index_registry).suggest(prefix:, limit:)
   end
 
@@ -671,10 +691,11 @@ class SearchEngine
   end
 
   def reindex
-    @index.clear
+    @index_registry.clear
+    indexer = Indexer.new(@index_registry)
 
-    @documents.each do |doc|
-      add_document(doc[:id], doc[:title], doc[:content], doc[:tags])
+    @document_registry.all.each do |document|
+      indexer.index_document(document)
     end
   end
 end
