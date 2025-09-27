@@ -1,5 +1,80 @@
 # frozen_string_literal: true
 
+# frozen_string_literal: true
+
+class Transaction
+  attr_reader :type, :amount
+
+  def initialize(amount:, balance_after:)
+    @type = self.class::TYPE
+    @amount = amount
+    @timestamp = Time.now.utc
+    @balance_after = balance_after
+  end
+
+  def to_h
+    instance_variables.each_with_object({}) do |var, hash|
+      hash[var.to_s.delete('@').to_sym] = instance_variable_get(var)
+    end
+  end
+end
+
+class DepositTransaction < Transaction
+  TYPE = 'deposit'
+end
+
+class WithdrawTransaction < Transaction
+  TYPE = 'withdraw'
+end
+
+class TransferOutTransaction < Transaction
+  TYPE = 'transfer_out'
+
+  def initialize(amount:, balance_after:, target:)
+    super(amount:, balance_after:)
+    @target = target
+  end
+end
+
+class TransferInTransaction < Transaction
+  TYPE = 'transfer_in'
+
+  def initialize(amount:, balance_after:, source:)
+    super(amount:, balance_after:)
+    @source = source
+  end
+end
+
+class InterestTransaction < Transaction
+  TYPE = 'interest'
+
+  def initialize(amount:, balance_after:, rate:)
+    super(amount:, balance_after:)
+    @rate = rate
+  end
+end
+
+class FeeTransaction < Transaction
+  TYPE = 'fee'
+end
+
+class TransactionDispatcher
+  TRANSACTION_MAP = {
+    deposit: DepositTransaction,
+    withdraw: WithdrawTransaction,
+    transfer_out: TransferOutTransaction,
+    transfer_in: TransferInTransaction,
+    interest: InterestTransaction,
+    fee: FeeTransaction
+  }.freeze
+
+  class << self
+    def dispatch(type)
+      TRANSACTION_MAP[type]
+    end
+  end
+end
+
 class TransactionHistory
   def initialize
     @transactions = []
@@ -7,6 +82,18 @@ class TransactionHistory
 
   def add(transaction)
     @transactions << transaction
+  end
+
+  def all
+    @transactions
+  end
+
+  def to_hashes
+    @transactions.map(&:to_h)
+  end
+
+  def size
+    @transactions.size
   end
 end
 
@@ -45,6 +132,8 @@ class InterestCalculator
 end
 
 class BankAccount
+  attr_reader :account_number
+
   def initialize(account_number, initial_balance)
     @account_number = account_number
     @balance = AccountBalance.new(initial_balance)
@@ -59,12 +148,10 @@ class BankAccount
 
     @balance.add(amount)
 
-    deposit_transaction = {
-      type: 'deposit',
-      amount: amount,
-      timestamp: Time.now,
+    deposit_transaction = TransactionDispatcher.dispatch(:deposit).new(
+      amount:,
       balance_after: @balance.amount
-    }
+    )
 
     record_transaction(deposit_transaction)
 
@@ -84,12 +171,10 @@ class BankAccount
 
     @balance.substract(amount)
 
-    withdraw_transaction = {
-      type: 'withdraw',
-      amount: amount,
-      timestamp: Time.now,
+    withdraw_transaction = TransactionDispatcher.dispatch(:withdraw).new(
+      amount:,
       balance_after: @balance.amount
-    }
+    )
 
     record_transaction(withdraw_transaction)
 
@@ -113,27 +198,15 @@ class BankAccount
     end
 
     @balance.substract(amount)
-    target_account.instance_variable_set(:@balance, target_account.instance_variable_get(:@balance) + amount)
+    target_account.receive_transfer(amount:, source_account_number: @account_number)
 
-    transfer_out_transaction = {
-      type: 'transfer_out',
-      amount: amount,
-      target: target_account.instance_variable_get(:@account_number),
-      timestamp: Time.now,
-      balance_after: @balance.amount
-    }
+    transfer_out_transaction = TransactionDispatcher.dispatch(:transfer_out).new(
+      amount:,
+      balance_after: @balance.amount,
+      target: target_account.account_number
+    )
 
     record_transaction(transfer_out_transaction)
-
-    transfer_in_transaction = {
-      type: 'transfer_in',
-      amount: amount,
-      source: @account_number,
-      timestamp: Time.now,
-      balance_after: target_account.instance_variable_get(:@balance).amount
-    }
-
-    target_account.instance_variable_get(:@transaction_history).add(transfer_in_transaction)
 
     true
   end
@@ -147,14 +220,11 @@ class BankAccount
     interest = InterestCalculator.new(rate).calculate(@balance.amount)
     @balance.add(interest)
 
-    interest_transaction = {
-      type: 'interest',
+    interest_transaction = TransactionDispatcher.dispatch(:interest).new(
       amount: interest,
-      rate: rate,
-      timestamp: Time.now,
-      balance_after: @balance.amount
-    }
-
+      balance_after: @balance.amount,
+      rate: rate
+    )
     record_transaction(interest_transaction)
 
     interest
@@ -165,7 +235,7 @@ class BankAccount
   end
 
   def get_transaction_history
-    @transaction_history
+    @transaction_history.to_hashes
   end
 
   def apply_fee(fee_amount)
@@ -178,12 +248,10 @@ class BankAccount
 
     puts 'Warning: Account balance is negative' if @balance.negative?
 
-    fee_transaction = {
-      type: 'fee',
+    fee_transaction = TransactionDispatcher.dispatch(:fee).new(
       amount: fee_amount,
-      timestamp: Time.now,
       balance_after: @balance.amount
-    }
+    )
 
     record_transaction(fee_transaction)
 
@@ -247,6 +315,20 @@ class BankAccount
 
     puts "Total Deposits: #{total_deposits}"
     puts "Total Withdrawals: #{total_withdrawals}"
+  end
+
+  protected
+
+  def receive_transfer(amount:, source_account_number:)
+    @balance.add(amount)
+
+    transfer_in_transaction = TransactionDispatcher.dispatch(:transfer_in).new(
+      amount:,
+      balance_after: @balance.amount,
+      source: source_account_number
+    )
+
+    record_transaction(transfer_in_transaction)
   end
 
   private
