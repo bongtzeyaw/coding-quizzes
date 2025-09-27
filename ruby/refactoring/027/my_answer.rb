@@ -129,39 +129,6 @@ class InterestCalculator
   end
 end
 
-class BulkTransactionResult
-  def initialize
-    @successful = 0
-    @failed = 0
-    @errors = []
-  end
-
-  def add_result(result)
-    if result.success?
-      @successful += 1
-    else
-      @failed += 1
-      @errors << result.error
-    end
-  end
-
-  def any_successful?
-    @successful.positive?
-  end
-
-  def summary
-    "Bulk transaction completed: #{@successful} successful, #{@failed} failed"
-  end
-
-  def to_h
-    {
-      successful: @successful,
-      failed: @failed,
-      errors: @errors
-    }
-  end
-end
-
 class TransactionsAggregationCalculator
   CREDIT_TRANSACTION_TYPES = %w[deposit transfer_in interest].freeze
   DEBIT_TRANSACTION_TYPES = %w[withdraw transfer_out fee].freeze
