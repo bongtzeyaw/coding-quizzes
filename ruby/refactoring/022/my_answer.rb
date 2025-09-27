@@ -170,12 +170,18 @@ class CacheSystemLogger
 end
 
 class CacheSystem
-  def initialize
-    @cache_storage = CacheStorage.new
-    @cache_retention_manager = CacheRetentionManager.new
-    @cache_hit_miss_counter = CacheHitMissCounter.new
-    @logger = CacheSystemLogger.new
-    @cache_statistics = CacheStatistics.new
+  def initialize(
+    cache_storage: CacheStorage.new,
+    cache_retention_manager: CacheRetentionManager.new,
+    cache_hit_miss_counter: CacheHitMissCounter.new,
+    logger: CacheSystemLogger.new,
+    cache_statistics: CacheStatistics.new
+  )
+    @cache_storage = cache_storage
+    @cache_retention_manager = cache_retention_manager
+    @cache_hit_miss_counter = cache_hit_miss_counter
+    @logger = logger
+    @cache_statistics = cache_statistics
   end
 
   def get(key, options = {})
