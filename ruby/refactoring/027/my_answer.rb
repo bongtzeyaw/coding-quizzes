@@ -1,8 +1,20 @@
+# frozen_string_literal: true
+
+class TransactionHistory
+  def initialize
+    @transactions = []
+  end
+
+  def add(transaction)
+    @transactions << transaction
+  end
+end
+
 class BankAccount
   def initialize(account_number, initial_balance)
     @account_number = account_number
     @balance = initial_balance
-    @transaction_history = []
+    @transaction_history = TransactionHistory.new
   end
 
   def deposit(amount)
@@ -12,12 +24,14 @@ class BankAccount
     end
 
     @balance += amount
-    @transaction_history << {
+    deposit_transaction = {
       type: 'deposit',
       amount: amount,
       timestamp: Time.now,
       balance_after: @balance
     }
+
+    record_transaction(deposit_transaction)
 
     true
   end
@@ -34,12 +48,15 @@ class BankAccount
     end
 
     @balance -= amount
-    @transaction_history << {
+
+    withdraw_transaction = {
       type: 'withdraw',
       amount: amount,
       timestamp: Time.now,
       balance_after: @balance
     }
+
+    record_transaction(withdraw_transaction)
 
     true
   end
@@ -63,7 +80,7 @@ class BankAccount
     @balance -= amount
     target_account.instance_variable_set(:@balance, target_account.instance_variable_get(:@balance) + amount)
 
-    @transaction_history << {
+    transfer_out_transaction = {
       type: 'transfer_out',
       amount: amount,
       target: target_account.instance_variable_get(:@account_number),
@@ -71,13 +88,17 @@ class BankAccount
       balance_after: @balance
     }
 
-    target_account.instance_variable_get(:@transaction_history) << {
+    record_transaction(transfer_out_transaction)
+
+    transfer_in_transaction = {
       type: 'transfer_in',
       amount: amount,
       source: @account_number,
       timestamp: Time.now,
       balance_after: target_account.instance_variable_get(:@balance)
     }
+
+    target_account.instance_variable_get(:@transaction_history).add(transfer_in_transaction)
 
     true
   end
@@ -91,13 +112,15 @@ class BankAccount
     interest = @balance * rate
     @balance += interest
 
-    @transaction_history << {
+    interest_transaction = {
       type: 'interest',
       amount: interest,
       rate: rate,
       timestamp: Time.now,
       balance_after: @balance
     }
+
+    record_transaction(interest_transaction)
 
     interest
   end
@@ -120,12 +143,14 @@ class BankAccount
 
     puts 'Warning: Account balance is negative' if @balance < 0
 
-    @transaction_history << {
+    fee_transaction = {
       type: 'fee',
       amount: fee_amount,
       timestamp: Time.now,
       balance_after: @balance
     }
+
+    record_transaction(fee_transaction)
 
     true
   end
@@ -187,5 +212,11 @@ class BankAccount
 
     puts "Total Deposits: #{total_deposits}"
     puts "Total Withdrawals: #{total_withdrawals}"
+  end
+
+  private
+
+  def record_transaction(transaction)
+    @transaction_history.add(transaction)
   end
 end
