@@ -131,6 +131,66 @@ class InterestCalculator
   end
 end
 
+class BulkTransactionResult
+  def initialize
+    @successful = 0
+    @failed = 0
+    @errors = []
+  end
+
+  def add_result(result)
+    if result.success?
+      @successful += 1
+    else
+      @failed += 1
+      @errors << result.error
+    end
+  end
+
+  def any_successful?
+    @successful.positive?
+  end
+
+  def summary
+    "Bulk transaction completed: #{@successful} successful, #{@failed} failed"
+  end
+
+  def to_h
+    {
+      successful: @successful,
+      failed: @failed,
+      errors: @errors
+    }
+  end
+end
+
+class BulkTransactionProcessor
+  def initialize(account)
+    @account = account
+  end
+
+  def process(transactions)
+    successful, failed = transactions.partition { |transaction_detail| process_single_transaction(transaction_detail) }
+    { successful: successful.size, failed: failed.size }
+  end
+
+  private
+
+  def process_single_transaction(transaction_detail)
+    case transaction_detail[:type]
+    when 'deposit'
+      @account.deposit(transaction_detail[:amount])
+    when 'withdraw'
+      @account.withdraw(transaction_detail[:amount])
+    when 'fee'
+      @account.apply_fee(transaction_detail[:fee] || 0)
+    else
+      puts "Unknown transaction type: #{transaction_detail[:type]}"
+      false
+    end
+  end
+end
+
 class BankAccount
   attr_reader :account_number
 
@@ -259,41 +319,11 @@ class BankAccount
   end
 
   def bulk_transactions(transactions)
-    successful = 0
-    failed = 0
+    result = BulkTransactionProcessor.new(self).process(transactions)
 
-    transactions.each do |transaction|
-      type = transaction[:type]
-      amount = transaction[:amount]
+    puts "Bulk transaction completed: #{result[:successful]} successful, #{result[:failed]} failed"
 
-      case type
-      when 'deposit'
-        if deposit(amount)
-          successful += 1
-        else
-          failed += 1
-        end
-      when 'withdraw'
-        if withdraw(amount)
-          successful += 1
-        else
-          failed += 1
-        end
-      when 'fee'
-        fee = transaction[:fee] || 0
-        if apply_fee(fee)
-          successful += 1
-        else
-          failed += 1
-        end
-      else
-        puts "Unknown transaction type: #{type}"
-        failed += 1
-      end
-    end
-
-    puts "Bulk transaction completed: #{successful} successful, #{failed} failed"
-    { successful: successful, failed: failed }
+    result
   end
 
   def account_summary
