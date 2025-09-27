@@ -67,6 +67,14 @@ class CacheRetentionManager
   end
 end
 
+class CacheValue
+  attr_reader :value
+
+  def initialize(value)
+    @value = value
+  end
+end
+
 class CacheStorage
   DEFAULT_MAX_SIZE = 100
 
@@ -80,7 +88,7 @@ class CacheStorage
 
   def find_by(key)
     @mutex.synchronize do
-      @cache[key]
+      @cache[key]&.value
     end
   end
 
@@ -92,7 +100,7 @@ class CacheStorage
 
   def set(key, value)
     @mutex.synchronize do
-      @cache[key] = value
+      @cache[key] = CacheValue.new(value)
     end
   end
 
@@ -117,7 +125,7 @@ class CacheStorage
   end
 
   def memory_usage
-    @cache.sum { |key, value| key.to_s.length + value.to_s.length }
+    @cache.sum { |key, cache_value| key.to_s.length + cache_value.value.to_s.length }
   end
 end
 
