@@ -49,13 +49,13 @@ class TestCacheRetentionManager < Minitest::Test
     assert @retention_manager.instance_variable_get(:@creation_times).key?('key1')
   end
 
-  def test_least_recently_used_key
+  def test_eviction_victim_key_with_default_lru_eviction_strategy
     @retention_manager.record_creation('key1')
     @retention_manager.record_creation('key2')
 
     @retention_manager.instance_variable_get(:@access_times)['key1'] = Time.now - 10
 
-    assert_equal 'key1', @retention_manager.least_recently_used_key
+    assert_equal 'key1', @retention_manager.eviction_victim_key
   end
 
   def test_equal_current_ttl

@@ -1,10 +1,23 @@
 # frozen_string_literal: true
 
+class EvictionStrategy
+  def select_victim_key
+    raise NotImplementedError, "#{self.class} must implement #select_victim_key"
+  end
+end
+
+class LRUEvictionStrategy < EvictionStrategy
+  def select_victim_key(access_times)
+    access_times.key(access_times.values.min)
+  end
+end
+
 class CacheRetentionManager
   DEFAULT_TTL = 60 * 60
 
-  def initialize(ttl: DEFAULT_TTL)
+  def initialize(ttl: DEFAULT_TTL, eviction_strategy: LRUEvictionStrategy.new)
     @ttl = ttl
+    @eviction_strategy = eviction_strategy
     @access_times = {}
     @creation_times = {}
     @mutex = Mutex.new
@@ -43,9 +56,9 @@ class CacheRetentionManager
     end
   end
 
-  def least_recently_used_key
+  def eviction_victim_key
     @mutex.synchronize do
-      @access_times.key(@access_times.values.min)
+      @eviction_strategy.select_victim_key(@access_times)
     end
   end
 
@@ -210,7 +223,7 @@ class CacheSystem
 
     value = yield
 
-    evict_lru_key if @cache_storage.capacity_reached?
+    evict_key if @cache_storage.capacity_reached?
 
     @cache_storage.set(key, value)
     @cache_retention_manager.record_creation(key)
@@ -219,7 +232,7 @@ class CacheSystem
   end
 
   def set(key, value, options = {})
-    evict_lru_key if !@cache_storage.key_exists?(key) && @cache_storage.capacity_reached?
+    evict_key if !@cache_storage.key_exists?(key) && @cache_storage.capacity_reached?
 
     @cache_storage.set(key, value)
     @cache_retention_manager.record_creation(key)
@@ -266,12 +279,12 @@ class CacheSystem
 
   private
 
-  def evict_lru_key
-    lru_key = @cache_retention_manager.least_recently_used_key
-    return unless lru_key
+  def evict_key
+    victim_key = @cache_retention_manager.eviction_victim_key
+    return unless victim_key
 
-    delete(lru_key)
-    @logger.log_eviction(lru_key)
+    delete(victim_key)
+    @logger.log_eviction(victim_key)
   end
 
   def handle_cache_hit(key)
