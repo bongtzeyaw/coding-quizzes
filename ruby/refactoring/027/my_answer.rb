@@ -191,6 +191,85 @@ class BulkTransactionProcessor
   end
 end
 
+class TransactionsAggregationCalculator
+  CREDIT_TRANSACTION_TYPES = %w[deposit transfer_in interest].freeze
+  DEBIT_TRANSACTION_TYPES = %w[withdraw transfer_out fee].freeze
+
+  def initialize(transaction_history)
+    @transaction_history = transaction_history
+  end
+
+  def calculate
+    {
+      total_transactions_count:,
+      total_deposits:,
+      total_withdrawals:
+    }
+  end
+
+  private
+
+  def credit_transactions
+    @transaction_history.all.select { |transaction| CREDIT_TRANSACTION_TYPES.include?(transaction.type) }
+  end
+
+  def debit_transactions
+    @transaction_history.all.select { |transaction| DEBIT_TRANSACTION_TYPES.include?(transaction.type) }
+  end
+
+  def total_transactions_count
+    @transaction_history.size
+  end
+
+  def total_deposits
+    @total_deposits ||= credit_transactions.sum(&:amount)
+  end
+
+  def total_withdrawals
+    @total_withdrawals ||= debit_transactions.sum(&:amount)
+  end
+end
+
+class AccountSummary
+  def initialize(account_number:, current_balance:, transaction_count:, total_deposits:, total_withdrawals:)
+    @account_number = account_number
+    @current_balance = current_balance
+    @transaction_count = transaction_count
+    @total_deposits = total_deposits
+    @total_withdrawals = total_withdrawals
+  end
+
+  def to_s
+    <<~SUMMARY
+      Account Number: #{@account_number}
+      Current Balance: #{@current_balance}
+      Transaction Count: #{@transaction_count}
+      Total Deposits: #{@total_deposits}
+      Total Withdrawals: #{@total_withdrawals}
+    SUMMARY
+  end
+end
+
+class AccountSummaryGenerator
+  def initialize(account_number:, balance_amount:, transaction_history:)
+    @account_number = account_number
+    @balance_amount = balance_amount
+    @transaction_history = transaction_history
+  end
+
+  def generate_summary
+    aggregation_result = TransactionsAggregationCalculator.new(@transaction_history).calculate
+
+    <<~SUMMARY
+      Account Number: #{@account_number}
+      Current Balance: #{@balance_amount}
+      Transaction Count: #{aggregation_result[:total_transactions_count]}
+      Total Deposits: #{aggregation_result[:total_deposits]}
+      Total Withdrawals: #{aggregation_result[:total_withdrawals]}
+    SUMMARY
+  end
+end
+
 class BankAccount
   attr_reader :account_number
 
@@ -327,24 +406,13 @@ class BankAccount
   end
 
   def account_summary
-    puts "Account Number: #{@account_number}"
-    puts "Current Balance: #{@balance.amount}"
-    puts "Transaction Count: #{@transaction_history.length}"
+    summary = AccountSummaryGenerator.new(
+      account_number: @account_number,
+      balance_amount: @balance.amount,
+      transaction_history: @transaction_history
+    ).generate_summary
 
-    total_deposits = 0
-    total_withdrawals = 0
-
-    @transaction_history.each do |transaction|
-      case transaction[:type]
-      when 'deposit', 'transfer_in', 'interest'
-        total_deposits += transaction[:amount]
-      when 'withdraw', 'transfer_out', 'fee'
-        total_withdrawals += transaction[:amount]
-      end
-    end
-
-    puts "Total Deposits: #{total_deposits}"
-    puts "Total Withdrawals: #{total_withdrawals}"
+    puts summary
   end
 
   protected
