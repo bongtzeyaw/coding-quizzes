@@ -167,14 +167,42 @@ class CacheHitMissCounter
   end
 end
 
+class CacheStatisticsSummary
+  attr_reader :storage_size, :storage_max_size, :hits, :misses, :hit_rate, :estimated_memory
+
+  def initialize(storage_size:, storage_max_size:, hits:, misses:, hit_rate:, estimated_memory:)
+    @storage_size = storage_size
+    @storage_max_size = storage_max_size
+    @hits = hits
+    @misses = misses
+    @hit_rate = hit_rate
+    @estimated_memory = estimated_memory
+  end
+end
+
 class CacheStatistics
   def display_summary(cache_storage:, cache_hit_miss_counter:)
+    summary = build_summary(cache_storage, cache_hit_miss_counter)
+
     puts 'Cache Statistics:'
-    puts "  Size: #{cache_storage.size}/#{cache_storage.max_size}"
-    puts "  Hits: #{cache_hit_miss_counter.hit_count}"
-    puts "  Misses: #{cache_hit_miss_counter.miss_count}"
-    puts "  Hit Rate: #{cache_hit_miss_counter.hit_rate}%"
-    puts "  Estimated Memory: #{cache_storage.memory_usage} bytes"
+    puts "  Size: #{summary.storage_size}/#{summary.storage_max_size}"
+    puts "  Hits: #{summary.hits}"
+    puts "  Misses: #{summary.misses}"
+    puts "  Hit Rate: #{summary.hit_rate}%"
+    puts "  Estimated Memory: #{summary.estimated_memory} bytes"
+  end
+
+  private
+
+  def build_summary(cache_storage, cache_hit_miss_counter)
+    CacheStatisticsSummary.new(
+      storage_size: cache_storage.size,
+      storage_max_size: cache_storage.max_size,
+      hits: cache_hit_miss_counter.hit_count,
+      misses: cache_hit_miss_counter.miss_count,
+      hit_rate: cache_hit_miss_counter.hit_rate,
+      estimated_memory: cache_storage.memory_usage
+    )
   end
 end
 
