@@ -72,7 +72,9 @@ class CacheStorage
   end
 
   def key_exists?(key)
-    @cache.key?(key)
+    @mutex.synchronize do
+      @cache.key?(key)
+    end
   end
 
   def set(key, value)
