@@ -169,12 +169,20 @@ class CacheSystemLogger
   end
 end
 
+class NullCacheSystemLogger
+  def log_cache_hit(key); end
+
+  def log_cache_miss(key); end
+
+  def log_eviction(key); end
+end
+
 class CacheSystem
   def initialize(
     cache_storage: CacheStorage.new,
     cache_retention_manager: CacheRetentionManager.new,
     cache_hit_miss_counter: CacheHitMissCounter.new,
-    logger: CacheSystemLogger.new,
+    logger: NullCacheSystemLogger.new,
     cache_statistics: CacheStatistics.new
   )
     @cache_storage = cache_storage
@@ -184,23 +192,23 @@ class CacheSystem
     @cache_statistics = cache_statistics
   end
 
-  def get(key, options = {})
+  def get(key)
     delete(key) if @cache_retention_manager.key_expired?(key)
 
     cache_value = @cache_storage.find_by(key)
 
     if cache_value
-      handle_cache_hit(key:, logging: options[:debug])
+      handle_cache_hit(key)
       return cache_value
     end
 
-    handle_cache_miss(key:, logging: options[:debug])
+    handle_cache_miss(key)
 
     return nil unless block_given?
 
     value = yield
 
-    evict_lru_key(logging: options[:debug]) if @cache_storage.capacity_reached?
+    evict_lru_key if @cache_storage.capacity_reached?
 
     @cache_storage.set(key, value)
     @cache_retention_manager.record_creation(key)
@@ -256,22 +264,22 @@ class CacheSystem
 
   private
 
-  def evict_lru_key(logging: false)
+  def evict_lru_key
     lru_key = @cache_retention_manager.least_recently_used_key
     return unless lru_key
 
     delete(lru_key)
-    @logger.log_eviction(lru_key) if logging
+    @logger.log_eviction(lru_key)
   end
 
-  def handle_cache_hit(key:, logging: false)
+  def handle_cache_hit(key)
     @cache_hit_miss_counter.record_hit
     @cache_retention_manager.record_access(key)
-    @logger.log_cache_hit(key) if logging
+    @logger.log_cache_hit(key)
   end
 
-  def handle_cache_miss(key:, logging: false)
+  def handle_cache_miss(key)
     @cache_hit_miss_counter.record_miss
-    @logger.log_cache_miss(key) if logging
+    @logger.log_cache_miss(key)
   end
 end

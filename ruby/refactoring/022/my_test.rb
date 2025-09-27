@@ -254,10 +254,12 @@ class TestCacheSystem < Minitest::Test
   end
 
   def test_logging_on_hit_and_miss
+    @cache_with_logger = CacheSystem.new(logger: CacheSystemLogger.new)
+
     output = capture_io do
-      @cache.get('missing', debug: true)
-      @cache.set('hit_key', 'hit_val')
-      @cache.get('hit_key', debug: true)
+      @cache_with_logger.get('missing')
+      @cache_with_logger.set('hit_key', 'hit_val')
+      @cache_with_logger.get('hit_key')
     end
     assert_includes output.join, '[CACHE MISS] Key: missing'
     assert_includes output.join, '[CACHE HIT] Key: hit_key'
