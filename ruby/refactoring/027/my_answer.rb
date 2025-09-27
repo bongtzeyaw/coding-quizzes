@@ -34,6 +34,16 @@ class AccountBalance
   end
 end
 
+class InterestCalculator
+  def initialize(interest_rate)
+    @interest_rate = interest_rate
+  end
+
+  def calculate(balance_amount)
+    balance_amount * @interest_rate
+  end
+end
+
 class BankAccount
   def initialize(account_number, initial_balance)
     @account_number = account_number
@@ -134,7 +144,7 @@ class BankAccount
       return nil
     end
 
-    interest = @balance.amount * rate
+    interest = InterestCalculator.new(rate).calculate(@balance.amount)
     @balance.add(interest)
 
     interest_transaction = {
