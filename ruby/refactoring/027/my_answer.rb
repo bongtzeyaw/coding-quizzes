@@ -1,7 +1,5 @@
 # frozen_string_literal: true
 
-# frozen_string_literal: true
-
 class Transaction
   attr_reader :type, :amount
 
@@ -164,33 +162,6 @@ class BulkTransactionResult
   end
 end
 
-class BulkTransactionProcessor
-  def initialize(account)
-    @account = account
-  end
-
-  def process(transactions)
-    successful, failed = transactions.partition { |transaction_detail| process_single_transaction(transaction_detail) }
-    { successful: successful.size, failed: failed.size }
-  end
-
-  private
-
-  def process_single_transaction(transaction_detail)
-    case transaction_detail[:type]
-    when 'deposit'
-      @account.deposit(transaction_detail[:amount])
-    when 'withdraw'
-      @account.withdraw(transaction_detail[:amount])
-    when 'fee'
-      @account.apply_fee(transaction_detail[:fee] || 0)
-    else
-      puts "Unknown transaction type: #{transaction_detail[:type]}"
-      false
-    end
-  end
-end
-
 class TransactionsAggregationCalculator
   CREDIT_TRANSACTION_TYPES = %w[deposit transfer_in interest].freeze
   DEBIT_TRANSACTION_TYPES = %w[withdraw transfer_out fee].freeze
@@ -270,6 +241,84 @@ class AccountSummaryGenerator
   end
 end
 
+class BulkTransactionProcessor
+  def initialize(account)
+    @account = account
+  end
+
+  def process(transactions)
+    successful, failed = transactions.partition { |transaction_detail| process_single_transaction(transaction_detail) }
+    { successful: successful.size, failed: failed.size }
+  end
+
+  private
+
+  def process_single_transaction(transaction_detail)
+    case transaction_detail[:type]
+    when 'deposit'
+      @account.deposit(transaction_detail[:amount])
+    when 'withdraw'
+      @account.withdraw(transaction_detail[:amount])
+    when 'fee'
+      @account.apply_fee(transaction_detail[:fee] || 0)
+    else
+      puts "Unknown transaction type: #{transaction_detail[:type]}"
+      false
+    end
+  end
+end
+
+class Validator
+  private
+
+  def failure_result(info)
+    { success: false, info: }
+  end
+end
+
+class DepositValidator < Validator
+  def validate(amount:)
+    return failure_result('Invalid amount') if amount <= 0
+
+    { success: true }
+  end
+end
+
+class WithdrawValidator < Validator
+  def validate(amount:, account_balance:)
+    return failure_result('Invalid amount') if amount <= 0
+    return failure_result('Insufficient funds') if account_balance.less_than?(amount)
+
+    { success: true }
+  end
+end
+
+class TransferValidator < Validator
+  def validate(amount:, account_balance:, target_account:)
+    return failure_result('Invalid amount') if amount <= 0
+    return failure_result('Insufficient funds') if account_balance.less_than?(amount)
+    return failure_result('Target account is nil') if target_account.nil?
+
+    { success: true }
+  end
+end
+
+class InterestCalculationValidator < Validator
+  def validate(rate:)
+    return failure_result('Invalid interest rate') if rate.negative? || rate > 1
+
+    { success: true }
+  end
+end
+
+class FeeApplicationValidator < Validator
+  def validate(fee_amount:)
+    return failure_result('Fee cannot be negative') if fee_amount.negative?
+
+    { success: true }
+  end
+end
+
 class BankAccount
   attr_reader :account_number
 
@@ -280,8 +329,11 @@ class BankAccount
   end
 
   def deposit(amount)
-    if amount <= 0
-      puts 'Invalid amount'
+    validator = DepositValidator.new
+    validation = validator.validate(amount:)
+
+    unless validation[:success]
+      puts validation[:info]
       return false
     end
 
@@ -298,13 +350,11 @@ class BankAccount
   end
 
   def withdraw(amount)
-    if amount <= 0
-      puts 'Invalid amount'
-      return false
-    end
+    validator = WithdrawValidator.new
+    validation = validator.validate(amount:, account_balance: @balance)
 
-    if @balance.less_than?(amount)
-      puts 'Insufficient funds'
+    unless validation[:success]
+      puts validation[:info]
       return false
     end
 
@@ -321,18 +371,11 @@ class BankAccount
   end
 
   def transfer(amount, target_account)
-    if amount <= 0
-      puts 'Invalid amount'
-      return false
-    end
+    validator = TransferValidator.new
+    validation = validator.validate(amount:, account_balance: @balance, target_account:)
 
-    if @balance.less_than?(amount)
-      puts 'Insufficient funds'
-      return false
-    end
-
-    if target_account.nil?
-      puts 'Target account is nil'
+    unless validation[:success]
+      puts validation[:info]
       return false
     end
 
@@ -351,8 +394,11 @@ class BankAccount
   end
 
   def calculate_interest(rate)
-    if rate < 0 || rate > 1
-      puts 'Invalid interest rate'
+    validator = InterestCalculationValidator.new
+    validation = validator.validate(rate:)
+
+    unless validation[:success]
+      puts validation[:info]
       return nil
     end
 
@@ -378,8 +424,11 @@ class BankAccount
   end
 
   def apply_fee(fee_amount)
-    if fee_amount < 0
-      puts 'Fee cannot be negative'
+    validator = FeeApplicationValidator.new
+    validation = validator.validate(fee_amount:)
+
+    unless validation[:success]
+      puts validation[:info]
       return false
     end
 
