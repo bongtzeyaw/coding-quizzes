@@ -331,7 +331,7 @@ class CacheSystem
     @cache_storage.set(key, value)
     @cache_retention_manager.record_creation(key)
 
-    nil unless @cache_retention_manager.equal_current_ttl?(options[:ttl])
+    nil if @cache_retention_manager.equal_current_ttl?(options[:ttl])
   end
 
   def delete(key)
