@@ -36,6 +36,15 @@ class CacheRetentionManager
     end
   end
 
+  def delete_multiple(keys)
+    @mutex.synchronize do
+      keys.each do |key|
+        @access_times.delete(key)
+        @creation_times.delete(key)
+      end
+    end
+  end
+
   def clear
     @mutex.synchronize do
       @access_times.clear
@@ -49,10 +58,27 @@ class CacheRetentionManager
     end
   end
 
+  def record_accesses(keys)
+    @mutex.synchronize do
+      keys.each do |key|
+        @access_times[key] = Time.now.utc
+      end
+    end
+  end
+
   def record_creation(key)
     @mutex.synchronize do
       @creation_times[key] = Time.now.utc
       @access_times[key] = Time.now.utc
+    end
+  end
+
+  def record_creations(keys)
+    @mutex.synchronize do
+      keys.each do |key|
+        @creation_times[key] = Time.now.utc
+        @access_times[key] = Time.now.utc
+      end
     end
   end
 
@@ -92,6 +118,12 @@ class CacheStorage
     end
   end
 
+  def find_multiple_by(keys)
+    @mutex.synchronize do
+      keys.map { |key| [key, @cache[key]&.value] }.to_h
+    end
+  end
+
   def key_exists?(key)
     @mutex.synchronize do
       @cache.key?(key)
@@ -104,9 +136,23 @@ class CacheStorage
     end
   end
 
+  def set_multiple(entries)
+    @mutex.synchronize do
+      entries.each do |key, value|
+        @cache[key] = CacheValue.new(value)
+      end
+    end
+  end
+
   def delete(key)
     @mutex.synchronize do
       @cache.delete(key)
+    end
+  end
+
+  def delete_multiple(keys)
+    @mutex.synchronize do
+      keys.each { |key| @cache.delete(key) }
     end
   end
 
@@ -125,7 +171,7 @@ class CacheStorage
   end
 
   def memory_usage
-    @cache.sum { |key, cache_value| key.to_s.length + cache_value.value.to_s.length }
+    @cache.sum { |key, cache_value| key.to_s.size + cache_value.value.to_s.size }
   end
 end
 
@@ -144,9 +190,21 @@ class CacheHitMissCounter
     end
   end
 
+  def record_hits(count)
+    @mutex.synchronize do
+      @hit_count += count
+    end
+  end
+
   def record_miss
     @mutex.synchronize do
       @miss_count += 1
+    end
+  end
+
+  def record_misses(count)
+    @mutex.synchronize do
+      @miss_count += count
     end
   end
 
@@ -302,15 +360,42 @@ class CacheSystem
   end
 
   def get_multiple(keys)
-    keys.each_with_object({}) do |key, results|
-      results[key] = get(key)
+    expired_existing_keys = keys.select do |key|
+      @cache_retention_manager.key_expired?(key) && @cache_storage.key_exists?(key)
     end
+
+    @cache_storage.delete_multiple(expired_existing_keys)
+    @cache_retention_manager.delete_multiple(expired_existing_keys)
+
+    existing_keys = keys.select { |key| @cache_storage.key_exists?(key) }
+    handle_cache_hits(existing_keys)
+    cache_hits_result = @cache_storage.find_multiple_by(existing_keys)
+
+    non_existing_keys = keys - existing_keys
+    handle_cache_misses(non_existing_keys)
+
+    if block_given?
+      new_entries = yield
+      cache_misses_result = non_existing_keys.map { |key| [key, new_entries[key]] }.to_h
+
+      set_multiple(cache_misses_result)
+    else
+      value = nil
+      cache_misses_result = non_existing_keys.map { |key| [key, value] }.to_h
+    end
+
+    cache_hits_result.merge(cache_misses_result)
   end
 
   def set_multiple(entries)
-    entries.each do |key, value|
-      set(key, value)
-    end
+    non_existing_keys = entries.keys.reject { |key| @cache_storage.key_exists?(key) }
+
+    remaining_capacity = @cache_storage.max_size - @cache_storage.size
+    delta_cache_storage_size = non_existing_keys.size - remaining_capacity
+    evict_keys(delta_cache_storage_size) if delta_cache_storage_size.positive?
+
+    @cache_storage.set_multiple(entries.slice(*non_existing_keys))
+    @cache_retention_manager.record_creations(non_existing_keys)
   end
 
   private
@@ -323,14 +408,37 @@ class CacheSystem
     @logger.log_eviction(victim_key)
   end
 
+  def evict_keys(count)
+    count.times do
+      evict_key
+    end
+  end
+
   def handle_cache_hit(key)
     @cache_hit_miss_counter.record_hit
     @cache_retention_manager.record_access(key)
     @logger.log_cache_hit(key)
   end
 
+  def handle_cache_hits(keys)
+    @cache_hit_miss_counter.record_hits(keys.size)
+    @cache_retention_manager.record_accesses(keys)
+
+    keys.each do |key|
+      @logger.log_cache_hit(key)
+    end
+  end
+
   def handle_cache_miss(key)
     @cache_hit_miss_counter.record_miss
     @logger.log_cache_miss(key)
+  end
+
+  def handle_cache_misses(keys)
+    @cache_hit_miss_counter.record_misses(keys.size)
+
+    keys.each do |key|
+      @logger.log_cache_miss(key)
+    end
   end
 end

@@ -246,6 +246,11 @@ class TestCacheSystem < Minitest::Test
     assert_equal({ 'k1' => 'v1', 'k2' => 'v2', 'k3' => nil }, result)
   end
 
+  def test_get_multiple_with_block_sets_value_on_miss
+    result = @cache.get_multiple(%w[k1 k2 k3]) { { 'k1' => 'k1_value', 'k2' => 'k2_value' } }
+    assert_equal({ 'k1' => 'k1_value', 'k2' => 'k2_value', 'k3' => nil }, result)
+  end
+
   def test_set_multiple
     entries = { 'a' => '1', 'b' => '2' }
     @cache.set_multiple(entries)
