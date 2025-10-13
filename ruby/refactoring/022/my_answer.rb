@@ -15,6 +15,8 @@ end
 class CacheRetentionManager
   DEFAULT_TTL = 60 * 60
 
+  attr_reader :ttl
+
   def initialize(ttl: DEFAULT_TTL, eviction_strategy: LRUEvictionStrategy.new)
     @ttl = ttl
     @eviction_strategy = eviction_strategy
@@ -93,11 +95,12 @@ class CacheRetentionManager
   end
 end
 
-class CacheValue
+class CacheEntry
   attr_reader :value
 
-  def initialize(value)
+  def initialize(value:, ttl:)
     @value = value
+    @ttl = ttl
   end
 end
 
@@ -130,16 +133,16 @@ class CacheStorage
     end
   end
 
-  def set(key, value)
+  def set(key:, value:, ttl:)
     @mutex.synchronize do
-      @cache[key] = CacheValue.new(value)
+      @cache[key] = CacheEntry.new(value:, ttl:)
     end
   end
 
-  def set_multiple(entries)
+  def set_multiple(entries:, ttl:)
     @mutex.synchronize do
       entries.each do |key, value|
-        @cache[key] = CacheValue.new(value)
+        @cache[key] = CacheEntry.new(value:, ttl:)
       end
     end
   end
@@ -390,7 +393,7 @@ class BulkOperation
       )
     end
 
-    @cache_storage.set_multiple(entries.slice(*non_existing_keys))
+    @cache_storage.set_multiple(entries: entries.slice(*non_existing_keys), ttl: @cache_retention_manager.ttl)
     @cache_retention_manager.record_creations(non_existing_keys)
   end
 end
@@ -445,7 +448,7 @@ class CacheSystem
       )
     end
 
-    @cache_storage.set(key, value)
+    @cache_storage.set(key:, value:, ttl: @cache_retention_manager.ttl)
     @cache_retention_manager.record_creation(key)
 
     value
@@ -460,7 +463,7 @@ class CacheSystem
       )
     end
 
-    @cache_storage.set(key, value)
+    @cache_storage.set(key:, value:, ttl: options[:ttl] || @cache_retention_manager.ttl)
     @cache_retention_manager.record_creation(key)
 
     nil if @cache_retention_manager.equal_current_ttl?(options[:ttl])

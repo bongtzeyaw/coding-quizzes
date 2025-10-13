@@ -70,21 +70,21 @@ class TestCacheStorage < Minitest::Test
   end
 
   def test_find_by
-    @storage.set('key1', 'value1')
+    @storage.set(key: 'key1', value: 'value1', ttl: 60)
 
     assert_equal 'value1', @storage.find_by('key1')
     assert_nil @storage.find_by('nonexistent')
   end
 
   def test_key_exists
-    @storage.set('key1', 'value1')
+    @storage.set(key: 'key1', value: 'value1', ttl: 60)
 
     assert @storage.key_exists?('key1')
     refute @storage.key_exists?('nonexistent')
   end
 
   def test_set_and_delete
-    @storage.set('key1', 'value1')
+    @storage.set(key: 'key1', value: 'value1', ttl: 60)
     assert_equal 1, @storage.size
 
     @storage.delete('key1')
@@ -92,8 +92,8 @@ class TestCacheStorage < Minitest::Test
   end
 
   def test_clear
-    @storage.set('key1', 'value1')
-    @storage.set('key2', 'value2')
+    @storage.set(key: 'key1', value: 'value1', ttl: 60)
+    @storage.set(key: 'key2', value: 'value2', ttl: 60)
 
     @storage.clear
 
@@ -103,16 +103,16 @@ class TestCacheStorage < Minitest::Test
   def test_capacity_reached
     refute @storage.capacity_reached?
 
-    @storage.set('key1', 'value1')
-    @storage.set('key2', 'value2')
-    @storage.set('key3', 'value3')
+    @storage.set(key: 'key1', value: 'value1', ttl: 60)
+    @storage.set(key: 'key2', value: 'value2', ttl: 60)
+    @storage.set(key: 'key3', value: 'value3', ttl: 60)
 
     assert @storage.capacity_reached?
   end
 
   def test_memory_usage
-    @storage.set('key1', 'value1')
-    @storage.set('key2', 'value2')
+    @storage.set(key: 'key1', value: 'value1', ttl: 60)
+    @storage.set(key: 'key2', value: 'value2', ttl: 60)
 
     expected_memory = 'key1'.length + 'value1'.length + 'key2'.length + 'value2'.length
     assert_equal expected_memory, @storage.memory_usage
