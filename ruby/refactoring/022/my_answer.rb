@@ -286,7 +286,118 @@ class NullCacheSystemLogger
   def log_eviction(key); end
 end
 
+module CacheHelper
+  def evict_key(cache_storage:, cache_retention_manager:, logger:)
+    victim_key = cache_retention_manager.eviction_victim_key
+    return unless victim_key
+
+    cache_storage.delete(victim_key)
+    cache_retention_manager.delete(victim_key)
+    logger.log_eviction(victim_key)
+  end
+
+  def evict_keys(count:, cache_storage:, cache_retention_manager:, logger:)
+    count.times do
+      evict_key(
+        cache_storage:,
+        cache_retention_manager:,
+        logger:
+      )
+    end
+  end
+
+  def handle_cache_hit(key:, cache_hit_miss_counter:, cache_retention_manager:, logger:)
+    cache_hit_miss_counter.record_hit
+    cache_retention_manager.record_access(key)
+    logger.log_cache_hit(key)
+  end
+
+  def handle_cache_hits(keys:, cache_hit_miss_counter:, cache_retention_manager:, logger:)
+    cache_hit_miss_counter.record_hits(keys.size)
+    cache_retention_manager.record_accesses(keys)
+    keys.each { |key| logger.log_cache_hit(key) }
+  end
+
+  def handle_cache_miss(key:, cache_hit_miss_counter:, logger:)
+    cache_hit_miss_counter.record_miss
+    logger.log_cache_miss(key)
+  end
+
+  def handle_cache_misses(keys:, cache_hit_miss_counter:, logger:)
+    cache_hit_miss_counter.record_misses(keys.size)
+    keys.each { |key| logger.log_cache_miss(key) }
+  end
+end
+
+class BulkOperation
+  include CacheHelper
+
+  def initialize(cache_storage:, cache_retention_manager:, cache_hit_miss_counter:, logger:)
+    @cache_storage = cache_storage
+    @cache_retention_manager = cache_retention_manager
+    @cache_hit_miss_counter = cache_hit_miss_counter
+    @logger = logger
+  end
+
+  def get_multiple(keys, &block)
+    expired_existing_keys = keys.select do |key|
+      @cache_retention_manager.key_expired?(key) && @cache_storage.key_exists?(key)
+    end
+
+    @cache_storage.delete_multiple(expired_existing_keys)
+    @cache_retention_manager.delete_multiple(expired_existing_keys)
+
+    existing_keys = keys.select { |key| @cache_storage.key_exists?(key) }
+    handle_cache_hits(
+      keys: existing_keys,
+      cache_hit_miss_counter: @cache_hit_miss_counter,
+      cache_retention_manager: @cache_retention_manager,
+      logger: @logger
+    )
+    cache_hits_result = @cache_storage.find_multiple_by(existing_keys)
+
+    non_existing_keys = keys - existing_keys
+    handle_cache_misses(
+      keys: non_existing_keys,
+      cache_hit_miss_counter: @cache_hit_miss_counter,
+      logger: @logger
+    )
+
+    if block_given?
+      new_entries = yield
+      cache_misses_result = non_existing_keys.map { |key| [key, new_entries[key]] }.to_h
+      set_multiple(cache_misses_result)
+    else
+      value = nil
+      cache_misses_result = non_existing_keys.map { |key| [key, value] }.to_h
+    end
+
+    cache_hits_result.merge(cache_misses_result)
+  end
+
+  def set_multiple(entries)
+    non_existing_keys = entries.keys.reject { |key| @cache_storage.key_exists?(key) }
+
+    remaining_capacity = @cache_storage.max_size - @cache_storage.size
+    delta_cache_storage_size = non_existing_keys.size - remaining_capacity
+
+    if delta_cache_storage_size.positive?
+      evict_keys(
+        count: delta_cache_storage_size,
+        cache_storage: @cache_storage,
+        cache_retention_manager: @cache_retention_manager,
+        logger: @logger
+      )
+    end
+
+    @cache_storage.set_multiple(entries.slice(*non_existing_keys))
+    @cache_retention_manager.record_creations(non_existing_keys)
+  end
+end
+
 class CacheSystem
+  include CacheHelper
+
   def initialize(
     cache_storage: CacheStorage.new,
     cache_retention_manager: CacheRetentionManager.new,
@@ -307,17 +418,32 @@ class CacheSystem
     cache_value = @cache_storage.find_by(key)
 
     if cache_value
-      handle_cache_hit(key)
+      handle_cache_hit(
+        key:,
+        cache_hit_miss_counter: @cache_hit_miss_counter,
+        cache_retention_manager: @cache_retention_manager,
+        logger: @logger
+      )
       return cache_value
     end
 
-    handle_cache_miss(key)
+    handle_cache_miss(
+      key:,
+      cache_hit_miss_counter: @cache_hit_miss_counter,
+      logger: @logger
+    )
 
     return nil unless block_given?
 
     value = yield
 
-    evict_key if @cache_storage.capacity_reached?
+    if @cache_storage.capacity_reached?
+      evict_key(
+        cache_storage: @cache_storage,
+        cache_retention_manager: @cache_retention_manager,
+        logger: @logger
+      )
+    end
 
     @cache_storage.set(key, value)
     @cache_retention_manager.record_creation(key)
@@ -326,7 +452,13 @@ class CacheSystem
   end
 
   def set(key, value, options = {})
-    evict_key if !@cache_storage.key_exists?(key) && @cache_storage.capacity_reached?
+    if !@cache_storage.key_exists?(key) && @cache_storage.capacity_reached?
+      evict_key(
+        cache_storage: @cache_storage,
+        cache_retention_manager: @cache_retention_manager,
+        logger: @logger
+      )
+    end
 
     @cache_storage.set(key, value)
     @cache_retention_manager.record_creation(key)
@@ -359,86 +491,21 @@ class CacheSystem
     )
   end
 
-  def get_multiple(keys)
-    expired_existing_keys = keys.select do |key|
-      @cache_retention_manager.key_expired?(key) && @cache_storage.key_exists?(key)
-    end
-
-    @cache_storage.delete_multiple(expired_existing_keys)
-    @cache_retention_manager.delete_multiple(expired_existing_keys)
-
-    existing_keys = keys.select { |key| @cache_storage.key_exists?(key) }
-    handle_cache_hits(existing_keys)
-    cache_hits_result = @cache_storage.find_multiple_by(existing_keys)
-
-    non_existing_keys = keys - existing_keys
-    handle_cache_misses(non_existing_keys)
-
-    if block_given?
-      new_entries = yield
-      cache_misses_result = non_existing_keys.map { |key| [key, new_entries[key]] }.to_h
-
-      set_multiple(cache_misses_result)
-    else
-      value = nil
-      cache_misses_result = non_existing_keys.map { |key| [key, value] }.to_h
-    end
-
-    cache_hits_result.merge(cache_misses_result)
+  def get_multiple(keys, &block)
+    BulkOperation.new(
+      cache_storage: @cache_storage,
+      cache_retention_manager: @cache_retention_manager,
+      cache_hit_miss_counter: @cache_hit_miss_counter,
+      logger: @logger
+    ).get_multiple(keys, &block)
   end
 
   def set_multiple(entries)
-    non_existing_keys = entries.keys.reject { |key| @cache_storage.key_exists?(key) }
-
-    remaining_capacity = @cache_storage.max_size - @cache_storage.size
-    delta_cache_storage_size = non_existing_keys.size - remaining_capacity
-    evict_keys(delta_cache_storage_size) if delta_cache_storage_size.positive?
-
-    @cache_storage.set_multiple(entries.slice(*non_existing_keys))
-    @cache_retention_manager.record_creations(non_existing_keys)
-  end
-
-  private
-
-  def evict_key
-    victim_key = @cache_retention_manager.eviction_victim_key
-    return unless victim_key
-
-    delete(victim_key)
-    @logger.log_eviction(victim_key)
-  end
-
-  def evict_keys(count)
-    count.times do
-      evict_key
-    end
-  end
-
-  def handle_cache_hit(key)
-    @cache_hit_miss_counter.record_hit
-    @cache_retention_manager.record_access(key)
-    @logger.log_cache_hit(key)
-  end
-
-  def handle_cache_hits(keys)
-    @cache_hit_miss_counter.record_hits(keys.size)
-    @cache_retention_manager.record_accesses(keys)
-
-    keys.each do |key|
-      @logger.log_cache_hit(key)
-    end
-  end
-
-  def handle_cache_miss(key)
-    @cache_hit_miss_counter.record_miss
-    @logger.log_cache_miss(key)
-  end
-
-  def handle_cache_misses(keys)
-    @cache_hit_miss_counter.record_misses(keys.size)
-
-    keys.each do |key|
-      @logger.log_cache_miss(key)
-    end
+    BulkOperation.new(
+      cache_storage: @cache_storage,
+      cache_retention_manager: @cache_retention_manager,
+      cache_hit_miss_counter: @cache_hit_miss_counter,
+      logger: @logger
+    ).set_multiple(entries)
   end
 end
