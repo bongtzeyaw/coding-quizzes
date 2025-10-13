@@ -101,6 +101,12 @@ class CacheEntry
   def initialize(value:, ttl:)
     @value = value
     @ttl = ttl
+    @created_at = Time.now.utc
+    @accessed_at = Time.now.utc
+  end
+
+  def touch
+    @accessed_at = Time.now.utc
   end
 end
 
@@ -117,13 +123,19 @@ class CacheStorage
 
   def find_by(key)
     @mutex.synchronize do
-      @cache[key]&.value
+      cache_entry = @cache[key]
+      cache_entry&.touch
+      cache_entry&.value
     end
   end
 
   def find_multiple_by(keys)
     @mutex.synchronize do
-      keys.map { |key| [key, @cache[key]&.value] }.to_h
+      keys.map do |key|
+        cache_entry = @cache[key]
+        cache_entry&.touch
+        [key, cache_entry&.value]
+      end.to_h
     end
   end
 
